@@ -278,13 +278,18 @@ class MainActivity : Activity() {
         setTextColor(Color.rgb(80, 91, 81))
         setPadding(dp(2), 0, dp(2), dp(8))
     }
-
-    private fun wrapScroll(content: LinearLayout): ScrollView = ScrollView(this).apply {
+private fun wrapScroll(content: LinearLayout): ScrollView =
+    ScrollView(this).apply {
         isFillViewport = true
-        addView(content, ScrollView.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
+        addView(
+            content,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
     }
+    
 
     private fun buildPlayerPage() {
         playerPage = pageColumn()
