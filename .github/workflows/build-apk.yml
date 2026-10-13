@@ -28,6 +28,13 @@ jobs:
           mkdir -p project
           unzip -q Automix-listo-para-GitHub.zip -d project
 
+      - name: Revisar archivos del proyecto
+        run: |
+          echo "=== Archivos encontrados ==="
+          find project -maxdepth 5 -type f | sort | head -200
+          echo "=== Archivos de Gradle ==="
+          find project -type f \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print
+          
       - name: Compilar APK
         run: |
           WRAPPER=$(find project -type f -name gradlew -print -quit)
