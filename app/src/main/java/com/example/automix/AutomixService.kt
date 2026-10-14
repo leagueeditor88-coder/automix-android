@@ -26,10 +26,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
-/**
- * Modelo único de pista usado por toda la app.
- * (Debe existir UNA sola definición en todo el proyecto.)
- */
 data class Track(
     val uri: Uri,
     val title: String,
@@ -37,13 +33,13 @@ data class Track(
     val durationMs: Long,
     val folder: String = "",
     val album: String = "",
-    val genre: String = ""
+    val genre: String = "",
+    val albumId: Long = -1L
 )
 
 /**
  * Automix: reproduce cada canción hasta [playPercent]% de su duración y hace un
- * crossfade (equal-power) de [fadeSec] segundos hacia la siguiente. También admite
- * un mashup básico opcional de dos pistas con superposición temporal.
+ * crossfade (equal-power) de [fadeSec] segundos hacia la siguiente.
  */
 class AutomixService : Service() {
 
@@ -53,7 +49,6 @@ class AutomixService : Service() {
         const val ACTION_PREV = "com.example.automix.PREV"
         private const val CHANNEL = "automix"
         private const val NOTIF_ID = 1
-        /** Cuánto antes del punto de corte se empieza a preparar la siguiente canción. */
         private const val PRELOAD_LEAD_MS = 15_000
     }
 
@@ -75,13 +70,12 @@ class AutomixService : Service() {
         }
     }
 
-    /** Siguiente canción preparada con antelación para que el crossfade empiece sin retraso. */
     private class Preload(val mp: MediaPlayer, val idx: Int) {
         var ready = false
         var failed = false
     }
 
-    // Ajustes (los cambia la Activity)
+    // Ajustes
     var playPercent = 70
     var fadeSec = 8
     var skipIntroSec = 0
@@ -264,18 +258,7 @@ class AutomixService : Service() {
         pos = max(0, pos - 1)
         transitionTo(order[pos], 2000)
     }
-/** Devuelve las próximas [limit] canciones en la cola (sin incluir la actual). */
-fun getUpcomingQueue(limit: Int = 2): List<Track> {
-    if (!running || order.isEmpty() || tracks.isEmpty()) return emptyList()
-    val result = mutableListOf<Track>()
-    var i = 1
-    while (result.size < limit && i <= order.size) {
-        val idx = (pos + i) % order.size
-        tracks.getOrNull(order[idx])?.let { result.add(it) }
-        i++
-    }
-    return result
-}
+
     fun togglePause() {
         if (cur == null) return
         if (paused) resume() else pause()
@@ -296,6 +279,37 @@ fun getUpcomingQueue(limit: Int = 2): List<Track> {
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         onChange?.invoke()
+    }
+
+    // 🆕 Progreso y seek
+    /** Devuelve (posición actual en ms, duración total en ms). */
+    fun getProgress(): Pair<Int, Int> {
+        val c = cur ?: return 0 to 0
+        return try {
+            val pos = c.mp.currentPosition
+            val dur = c.mp.duration.takeIf { it > 0 } ?: 0
+            pos to dur
+        } catch (_: Exception) {
+            0 to 0
+        }
+    }
+
+    /** Salta a la posición [ms] de la canción actual. */
+    fun seekTo(ms: Int) {
+        try { cur?.mp?.seekTo(ms) } catch (_: Exception) {}
+    }
+
+    /** Devuelve las próximas [limit] canciones en la cola (sin incluir la actual). */
+    fun getUpcomingQueue(limit: Int = 2): List<Track> {
+        if (!running || order.isEmpty() || tracks.isEmpty()) return emptyList()
+        val result = mutableListOf<Track>()
+        var i = 1
+        while (result.size < limit && i <= order.size) {
+            val idx = (pos + i) % order.size
+            tracks.getOrNull(order[idx])?.let { result.add(it) }
+            i++
+        }
+        return result
     }
 
     // ---------- Lógica de Automix ----------
@@ -505,6 +519,8 @@ fun getUpcomingQueue(limit: Int = 2): List<Track> {
                             if (preload == null && position >= triggerAtMs - PRELOAD_LEAD_MS) preloadNext()
                             val remaining = triggerAtMs - position
                             if (remaining in 1..299) delay = remaining.toLong().coerceAtLeast(50L)
+                            // 🆕 Notificar a la UI cada ~500ms para avanzar la barra de progreso
+                            if (position % 500 < 300) onChange?.invoke()
                         }
                     }
                 } catch (_: Exception) {}
@@ -564,7 +580,8 @@ fun getUpcomingQueue(limit: Int = 2): List<Track> {
     }
 
     // ---------- Notificación / servicio en primer plano ----------
-override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+
+     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureForeground()
         when (intent?.action) {
             ACTION_PAUSE -> togglePause()
@@ -595,48 +612,55 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     }
 
     private fun createNotification(): Notification {
-    val title = current?.title ?: "Automix"
-    val artist = current?.artist ?: "Reproduciendo música"
+        val title = current?.title ?: "Automix"
+        val artist = current?.artist ?: "Reproduciendo música"
 
-    val mainIntent = Intent(this, MainActivity::class.java)
-    val pendingIntent = PendingIntent.getActivity(
-        this, 0, mainIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+        val mainIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, mainIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-    val pauseIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PAUSE }
-    val pausePending = PendingIntent.getService(
-        this, 1, pauseIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+        val pauseIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PAUSE }
+        val pausePending = PendingIntent.getService(
+            this, 1, pauseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-    val nextIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_NEXT }
-    val nextPending = PendingIntent.getService(
-        this, 2, nextIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+        val nextIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_NEXT }
+        val nextPending = PendingIntent.getService(
+            this, 2, nextIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-    val prevIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PREV }
-    val prevPending = PendingIntent.getService(
-        this, 3, prevIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+        val prevIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PREV }
+        val prevPending = PendingIntent.getService(
+            this, 3, prevIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-    val playPauseIcon = if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause
-    val playPauseText = if (paused) "Reproducir" else "Pausar"
+        val playPauseIcon = if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause
+        val playPauseText = if (paused) "Reproducir" else "Pausar"
 
-    return NotificationCompat.Builder(this, CHANNEL)
-        .setContentTitle(title)
-        .setContentText(artist)
-        .setSmallIcon(android.R.drawable.ic_media_play)
-        .setContentIntent(pendingIntent)
-        .setSilent(true)
-        .addAction(android.R.drawable.ic_media_previous, "Anterior", prevPending)
-        .addAction(playPauseIcon, playPauseText, pausePending)
-        .addAction(android.R.drawable.ic_media_next, "Siguiente", nextPending)
-        .setOngoing(!paused)
-        .build()
+        return NotificationCompat.Builder(this, CHANNEL)
+            .setContentTitle(title)
+            .setContentText(artist)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(pendingIntent)
+            .setSilent(true)
+            .addAction(android.R.drawable.ic_media_previous, "Anterior", prevPending)
+            .addAction(playPauseIcon, playPauseText, pausePending)
+            .addAction(android.R.drawable.ic_media_next, "Siguiente", nextPending)
+            .setOngoing(!paused)
+            .build()
     }
-    
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        cur?.release(); cur = null
+        out?.release(); out = null
+        discardPreload()
+        abandonFocus()
+        super.onDestroy()
+    }
 }
-    
