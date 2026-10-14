@@ -35,7 +35,9 @@ data class Track(
     val title: String,
     val artist: String,
     val durationMs: Long,
-    val folder: String = ""
+    val folder: String = "",
+    val album: String = "",
+    val genre: String = ""
 )
 
 /**
