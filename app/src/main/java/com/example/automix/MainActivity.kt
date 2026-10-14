@@ -230,9 +230,9 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-)
-        
-
+ )
+}        
+            
         bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
         ensurePermissions()
     }
