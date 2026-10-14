@@ -1440,6 +1440,7 @@ Button(
         fontWeight = FontWeight.Bold
     )
 }
+}
 
         Spacer(Modifier.height(8.dp))
 
