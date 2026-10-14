@@ -102,8 +102,10 @@ class MainActivity : ComponentActivity() {
     val sortField: String = "Título",
     val filterArtist: String = "",
     val filterAlbum: String = "",
-    val filterGenre: String = ""
-)
+    val filterGenre: String = "",
+    val upcomingQueue: List<Track> = emptyList()
+)  
+
 
     private val audioPerm: String =
         if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
@@ -626,6 +628,7 @@ private fun playRandom() {
     private fun refreshNow() {
         val s = svc
         val t = s?.current
+        val upcoming = s?.getUpcomingQueue(2) ?: emptyList()
         val display = buildDisplayList()
         pushState {
             it.copy(
@@ -636,7 +639,8 @@ private fun playRandom() {
                 currentBpm = t?.let { tr -> bpmCache[tr.uri.toString()] },
                 currentKey = t?.let { tr -> keyCache[tr.uri.toString()] },
                 bpmMap = bpmCache.toMap(),
-                keyMap = keyCache.toMap()
+                keyMap = keyCache.toMap(),
+                upcomingQueue = upcoming
             )
         }
     }
@@ -845,35 +849,196 @@ fun PlayerScreen(
                 ModeButton("BPM", Icons.Default.Speed, state.sortMode == "BPM", Modifier.weight(1f)) { onSetSort("BPM") }
             }
         }
+@Composable
+fun PlayerScreen(
+    state: MainActivity.UiSnapshot,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onStop: () -> Unit,
+    onPlayTrack: (Int) -> Unit,
+    onStartAutomix: () -> Unit,
+    onSetSort: (String) -> Unit,
+    onRequestPermissions: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // ─── Tarjeta principal (grande) ───
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.QueueMusic, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Text("Biblioteca · ${state.tracks.size}", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.height(8.dp))
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Portada
+                    Box(
+                        Modifier
+                            .size(160.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.MusicNote,
+                            null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(72.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // Título y artista
+                    Text(
+                        state.current?.title ?: "Sin reproducción",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        state.current?.artist ?: "Toca una canción",
+                        fontSize = 15.sp,
+                        color = Color.Gray,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // Chips
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.currentBpm?.let { Chip("$it BPM") }
+                        state.currentKey?.let { Chip(shortKey(it)) }
+                        Chip("${state.tracks.size} pistas")
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+
+                    // Botón AUTOMIX grande
+                    Button(
+                        onClick = onStartAutomix,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "AUTOMIX",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            letterSpacing = 2.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // Controles
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onPrev) {
+                            Icon(Icons.Default.SkipPrevious, "Anterior", modifier = Modifier.size(32.dp))
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            IconButton(onClick = onPlayPause, modifier = Modifier.fillMaxSize()) {
+                                Icon(
+                                    if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    "Play/Pausa",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                        IconButton(onClick = onNext) {
+                            Icon(Icons.Default.SkipNext, "Siguiente", modifier = Modifier.size(32.dp))
+                        }
+                        IconButton(onClick = onStop) {
+                            Icon(Icons.Default.Close, "Stop", modifier = Modifier.size(28.dp))
+                        }
+                    }
                 }
-                TextButton(onClick = onRequestPermissions) { Text("Recargar", color = MaterialTheme.colorScheme.primary) }
             }
         }
-        if (state.analysisText.isNotBlank()) {
-            item { Text(state.analysisText, fontSize = 12.sp, color = Color.Gray) }
+
+        // ─── Barra de cola compacta (2 canciones) ───
+        item {
+            if (state.upcomingQueue.isNotEmpty()) {
+                CompactQueue(
+                    upcoming = state.upcomingQueue,
+                    totalCount = state.upcomingQueue.size,
+                    onPlayTrack = { track ->
+                        val idx = state.tracks.indexOfFirst { it.uri == track.uri }
+                        if (idx >= 0) onPlayTrack(idx)
+                    }
+                )
+            }
         }
+
+        // ─── Modos de orden ───
+        item {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ModeButton("Aleatorio", Icons.Default.Shuffle, state.sortMode == "Aleatorio", Modifier.weight(1f)) { onSetSort("Aleatorio") }
+                ModeButton("Smart", Icons.Default.Psychology, state.sortMode == "Smart", Modifier.weight(1f)) { onSetSort("Smart") }
+                ModeButton("BPM", Icons.Default.Speed, state.sortMode == "BPM", Modifier.weight(1f)) { onSetSort("BPM") }
+            }
+        }
+
+        // ─── Aviso de permisos ───
         if (!state.permissionGranted && state.tracks.isEmpty()) {
-            item { Text("Esperando permiso de audio…", color = Color.Gray) }
+            item {
+                Text(
+                    "Esperando permiso de audio…",
+                    color = Color.Gray,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
         }
-        items(state.tracks) { track ->
-            val idx = state.tracks.indexOf(track)
-            TrackItem(
-                track = track,
-                bpm = state.bpmMap[track.uri.toString()],
-                key = state.keyMap[track.uri.toString()],
-                playing = state.current?.uri == track.uri,
-                onClick = { onPlayTrack(idx) }
-            )
+
+        // ─── Botón discreto para recargar ───
+        item {
+            TextButton(
+                onClick = onRequestPermissions,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Recargar biblioteca (${state.tracks.size})",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(Modifier.height(16.dp))
         }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
-
 @Composable
 fun Chip(text: String) {
     Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -921,7 +1086,101 @@ fun TrackItem(track: Track, bpm: Int?, key: String?, playing: Boolean, onClick: 
         }
     }
 }
+@Composable
+fun CompactQueue(
+    upcoming: List<Track>,
+    totalCount: Int,
+    onPlayTrack: (Track) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val visible = if (expanded) upcoming else upcoming.take(2)
 
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            // Cabecera con contador y botón expandir
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.QueueMusic,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "A continuación",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (upcoming.size > 2) {
+                    TextButton(
+                        onClick = { expanded = !expanded },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Text(
+                            if (expanded) "Ver menos ▲" else "Ver todas ($totalCount) ▼",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            if (visible.isEmpty()) {
+                Text(
+                    "Sin más canciones en la cola",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else {
+                visible.forEachIndexed { i, track ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onPlayTrack(track) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${i + 1}.",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.width(18.dp)
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                track.title,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                track.artist,
+                                fontSize = 10.sp,
+                                color = Color.Gray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 @Composable
 fun MashupScreen(state: MainActivity.UiSnapshot, onMashup: (Int) -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
