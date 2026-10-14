@@ -661,10 +661,18 @@ fun AutomixApp(
     onLookupGenre: () -> Unit,
     onMashup: (Int) -> Unit,
     onRequestPermissions: () -> Unit,
+    onReshuffleQueue: () -> Unit,
+    // 🆕 Biblioteca
+    onSearchChange: (String) -> Unit,
+    onSortFieldChange: (String) -> Unit,
+    onFilterArtist: (String) -> Unit,
+    onFilterAlbum: (String) -> Unit,
+    onFilterGenre: (String) -> Unit,
+    onPlayFiltered: (List<Track>, Int) -> Unit,
+    onPlayThisOrder: (List<Track>) -> Unit
 ) {
     var tab by remember { mutableStateOf(0) }
-
-    Scaffold(
+Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("AUTOMIX", fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, color = MaterialTheme.colorScheme.primary) },
@@ -673,25 +681,72 @@ fun AutomixApp(
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                NavigationBarItem(icon = { Icon(Icons.Default.Home, null) }, label = { Text("Reproductor") },
-                    selected = tab == 0, onClick = { tab = 0 })
-                NavigationBarItem(icon = { Icon(Icons.Default.PlayArrow, null) }, label = { Text("Mashup") },
-                    selected = tab == 1, onClick = { tab = 1 })
-                NavigationBarItem(icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Ajustes") },
-                    selected = tab == 2, onClick = { tab = 2 })
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, null) },
+                    label = { Text("Reproductor") },
+                    selected = tab == 0,
+                    onClick = { tab = 0 }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.QueueMusic, null) },
+                    label = { Text("Biblioteca") },
+                    selected = tab == 1,
+                    onClick = { tab = 1 }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.PlayArrow, null) },
+                    label = { Text("Mashup") },
+                    selected = tab == 2,
+                    onClick = { tab = 2 }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, null) },
+                    label = { Text("Ajustes") },
+                    selected = tab == 3,
+                    onClick = { tab = 3 }
+                )
             }
         }
     ) { pad ->
         Box(modifier = Modifier.padding(pad)) {
             when (tab) {
-                0 -> PlayerScreen(state, onPlayPause, onNext, onPrev, onStop, onPlayTrack, onStartAutomix, onSetSort, onRequestPermissions)
-                1 -> MashupScreen(state, onMashup)
-                2 -> SettingsScreen(state, onSetPercent, onSetFade, onSetSkip, onSetTransition, onDetectBpm, onDetectKey, onLookupGenre)
+                0 -> PlayerScreen(
+                    state = state,
+                    onPlayPause = onPlayPause,
+                    onNext = onNext,
+                    onPrev = onPrev,
+                    onStop = onStop,
+                    onPlayTrack = onPlayTrack,
+                    onStartAutomix = onStartAutomix,
+                    onSetSort = onSetSort,
+                    onRequestPermissions = onRequestPermissions
+                )
+                1 -> LibraryScreen(
+                    state = state,
+                    onSearchChange = onSearchChange,
+                    onSortChange = onSortFieldChange,
+                    onFilterArtist = onFilterArtist,
+                    onFilterAlbum = onFilterAlbum,
+                    onFilterGenre = onFilterGenre,
+                    onPlayTrack = onPlayFiltered,
+                    onPlayThisOrder = onPlayThisOrder
+                )
+                2 -> MashupScreen(state, onMashup)
+                3 -> SettingsScreen(
+                    state = state,
+                    onSetPercent = onSetPercent,
+                    onSetFade = onSetFade,
+                    onSetSkip = onSetSkip,
+                    onSetTransition = onSetTransition,
+                    onDetectBpm = onDetectBpm,
+                    onDetectKey = onDetectKey,
+                    onLookupGenre = onLookupGenre
+                )
             }
         }
     }
 }
-
+    
 @Composable
 fun PlayerScreen(
     state: MainActivity.UiSnapshot,
