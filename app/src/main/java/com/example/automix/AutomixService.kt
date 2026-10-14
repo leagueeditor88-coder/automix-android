@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -20,6 +19,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import androidx.core.app.NotificationCompat
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -103,8 +103,8 @@ class AutomixService : Service() {
     private var focusReq: AudioFocusRequest? = null
     private var mashupFadeRunnable: Runnable? = null
     private var preload: Preload? = null
-    private var wrapOrder: MutableList<Int>? = null // orden ya calculado si la siguiente canción reinicia la lista
-    private var sequential = false // true = la cola sigue exactamente el orden de la lista visible
+    private var wrapOrder: MutableList<Int>? = null
+    private var sequential = false
     private val handler = Handler(Looper.getMainLooper())
 
     private val attrs = AudioAttributes.Builder()
@@ -129,7 +129,6 @@ class AutomixService : Service() {
         transitionTo(order[0], 1500)
     }
 
-    /** Reproduce siguiendo exactamente el orden de [list], empezando en [startAt]. Al llegar al final vuelve al principio. */
     fun startOrdered(list: List<Track>, startAt: Int) {
         if (list.isEmpty()) return
         discardPreload()
@@ -145,7 +144,6 @@ class AutomixService : Service() {
         transitionTo(order[pos], 1500)
     }
 
-    /** Cambia el orden de la cola para que coincida con la lista visible, sin interrumpir la canción actual. */
     fun reorderQueue(list: List<Track>) {
         if (!running || list.isEmpty()) return
         val curUri = current?.uri
@@ -153,10 +151,9 @@ class AutomixService : Service() {
         tracks = list
         order = list.indices.toMutableList()
         sequential = true
-        pos = list.indexOfFirst { it.uri == curUri } // -1 si la canción actual ya no está en la lista
+        pos = list.indexOfFirst { it.uri == curUri }
     }
 
-    /** Starts a basic two-track mashup: both tracks play at once, then the second fades out. */
     fun startMashup(list: List<Track>, primaryIndex: Int, secondaryIndex: Int) {
         if (list.size < 2 || primaryIndex !in list.indices || secondaryIndex !in list.indices || primaryIndex == secondaryIndex) return
         loadingToken++
@@ -307,7 +304,6 @@ class AutomixService : Service() {
         transitionTo(order[pos], ms)
     }
 
-    /** Prepara en segundo plano la canción que tocará después de la actual. */
     private fun preloadNext() {
         if (!running || tracks.isEmpty() || preload != null) return
         val nextIdx = if (pos + 1 < order.size) {
@@ -334,7 +330,7 @@ class AutomixService : Service() {
             }
             preload = pl
             mp.prepareAsync()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             preload = null
             try { mp.release() } catch (_: Exception) {}
         }
@@ -356,7 +352,6 @@ class AutomixService : Service() {
         val token = ++loadingToken
         triggerAtMs = Int.MAX_VALUE
 
-        // Si la canción ya estaba precargada, el crossfade empieza al instante.
         val pre = preload
         preload = null
         if (pre != null && pre.idx == idx && !pre.failed) {
@@ -386,7 +381,7 @@ class AutomixService : Service() {
             }
             attachPlaybackListeners(mp, token)
             mp.prepareAsync()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             try { mp.release() } catch (_: Exception) {}
             if (token == loadingToken) handler.post { failAndSkip() }
         }
@@ -552,6 +547,8 @@ class AutomixService : Service() {
     }
 
     // ---------- Notificación / servicio en primer plano ----------
+    
+     -------- Notificación / servicio en primer plano ----------
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureForeground()
@@ -568,56 +565,66 @@ class AutomixService : Service() {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Reproducción", NotificationManager.IMPORTANCE_LOW)
         )
-        val n = buildNotification()
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
-            startForeground(NOTIF_ID, n)
+            startForeground(NOTIF_ID, notification)
         }
-    }
-
-    private fun buildNotification(): Notification {
-        val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
-        )
-        fun act(action: String, icon: Int, label: String): Notification.Action {
-            val pi = PendingIntent.getService(
-                this, action.hashCode(),
-                Intent(this, AutomixService::class.java).setAction(action),
-                PendingIntent.FLAG_IMMUTABLE
-            )
-            return Notification.Action.Builder(Icon.createWithResource(this, icon), label, pi).build()
-        }
-        return Notification.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle(current?.title ?: "Automix")
-            .setContentText(current?.artist ?: "Listo")
-            .setContentIntent(open)
-            .setOngoing(true)
-            .addAction(act(ACTION_PREV, android.R.drawable.ic_media_previous, "Anterior"))
-            .addAction(
-                act(
-                    ACTION_PAUSE,
-                    if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
-                    if (paused) "Reanudar" else "Pausa"
-                )
-            )
-            .addAction(act(ACTION_NEXT, android.R.drawable.ic_media_next, "Siguiente"))
-            .build()
     }
 
     private fun updateNotification() {
-        if (running) {
-            getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification())
-        }
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.notify(NOTIF_ID, createNotification())
+        } catch (_: Exception) {}
     }
 
-    override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
-        cur?.release(); cur = null
-        out?.release(); out = null
-        discardPreload()
-        abandonFocus()
-        super.onDestroy()
+    private fun createNotification(): Notification {
+        val title = current?.title ?: "Automix"
+        val artist = current?.artist ?: "Reproduciendo música"
+
+        val mainIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, mainIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val pauseIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PAUSE }
+        val pausePending = PendingIntent.getService(
+            this, 1, pauseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val nextIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_NEXT }
+        val nextPending = PendingIntent.getService(
+            this, 2, nextIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val prevIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PREV }
+        val prevPending = PendingIntent.getService(
+            this, 3, prevIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val playPauseIcon = if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause
+        val playPauseText = if (paused) "Reproducir" else "Pausar"
+
+        return NotificationCompat.Builder(this, CHANNEL)
+            .setContentTitle(title)
+            .setContentText(artist)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(pendingIntent)
+            .setSilent(true)
+            .addAction(android.R.drawable.ic_media_previous, "Anterior", prevPending)
+            .addAction(playPauseIcon, playPauseText, pausePending)
+            .addAction(android.R.drawable.ic_media_next, "Siguiente", nextPending)
+            .setStyle(
+                androidx.media.app.NotificationCompat.MediaStyle()
+                    .setShowActionsInCompactView(0, 1, 2)
+            )
+            .setOngoing(!paused)
+            .build()
     }
 }
