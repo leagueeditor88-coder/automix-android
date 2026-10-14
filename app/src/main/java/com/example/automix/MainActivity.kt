@@ -1,5 +1,6 @@
 package com.example.automix
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,9 +19,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+
+// Modelo Track declarado una sola vez aquí para evitar redeclaraciones
+data class Track(
+    val title: String,
+    val artist: String,
+    val bpm: String,
+    val key: String,
+    val genre: String
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,7 +49,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AutomixTheme(content: @Composable () -> Unit) {
     val LightColorScheme = lightColorScheme(
-        primary = Color(0xFF2E6F40), // Verde principal elegante
+        primary = Color(0xFF2E6F40),
         onPrimary = Color.White,
         primaryContainer = Color(0xFFD8F3DC),
         onPrimaryContainer = Color(0xFF1B4332),
@@ -54,7 +67,7 @@ fun AutomixTheme(content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutomixApp() {
-    var selectedTab by remember { mutableStateOf(0) } // 0: Reproductor, 1: Mashup, 2: Ajustes
+    var selectedTab by remember { mutableStateOf(0) }
     var selectedMode by remember { mutableStateOf("Aleatorio") }
 
     Scaffold(
@@ -111,6 +124,23 @@ fun AutomixApp() {
 
 @Composable
 fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(false) }
+
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            val mediaItem = MediaItem.fromUri(Uri.parse("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"))
+            setMediaItem(mediaItem)
+            prepare()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
     val tracks = listOf(
         Track("Midnight Vibes", "The Sunset Riders", "128 BPM", "C#m", "Pop"),
         Track("Better Days", "Luna Coast", "122 BPM", "G", "Pop"),
@@ -127,7 +157,6 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
     ) {
         item {
             Spacer(modifier = Modifier.height(4.dp))
-            // Tarjeta Principal del Reproductor
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -165,7 +194,6 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Barra de Progreso
                     Column {
                         LinearProgressIndicator(
                             progress = { 0.35f },
@@ -185,7 +213,6 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Controles de Reproducción
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround,
@@ -199,8 +226,19 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(56.dp)
                         ) {
-                            IconButton(onClick = {}, modifier = Modifier.fillMaxSize()) {
-                                Icon(Icons.Default.Pause, contentDescription = "Pausa", tint = MaterialTheme.colorScheme.onPrimary)
+                            IconButton(onClick = {
+                                if (isPlaying) {
+                                    exoPlayer.pause()
+                                } else {
+                                    exoPlayer.play()
+                                }
+                                isPlaying = !isPlaying
+                            }, modifier = Modifier.fillMaxSize()) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
                             }
                         }
 
@@ -211,7 +249,6 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
             }
         }
 
-        // Botones de Modos de Reproducción (Aleatorio, Smart, Género)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -241,7 +278,6 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
             }
         }
 
-        // Biblioteca Compacta
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -333,8 +369,6 @@ fun TrackItem(track: Track) {
         }
     }
 }
-
-data class Track(val title: String, val artist: String, val bpm: String, val key: String, val genre: String)
 
 @Composable
 fun MashupScreen() {
