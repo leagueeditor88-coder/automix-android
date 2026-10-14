@@ -1,5 +1,7 @@
 package com.example.automix
 
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Check
 import android.Manifest
 import android.content.ComponentName
 import android.content.ContentUris
@@ -1477,25 +1479,96 @@ Button(
                     playing = state.current?.uri == track.uri,
                     onClick = { onPlayTrack(filtered, idx) }
                 )
+// Fila de orden: dropdown + botón ↑↓
+Row(
+    Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalAlignment = Alignment.CenterVertically
+) {
+    // Dropdown de orden
+    var sortExpanded by remember { mutableStateOf(false) }
+    Box(Modifier.weight(1f)) {
+        OutlinedButton(
+            onClick = { sortExpanded = true },
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            shape = RoundedCornerShape(22.dp)
+        ) {
+            Icon(
+                Icons.Default.Sort,
+                null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "Ordenar: ${state.sortField}",
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        DropdownMenu(
+            expanded = sortExpanded,
+            onDismissRequest = { sortExpanded = false }
+        ) {
+            listOf("Título", "Artista", "Álbum", "BPM", "Género").forEach { field ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (state.sortField == field) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(field, fontSize = 13.sp)
+                        }
+                    },
+                    onClick = {
+                        onSortChange(field)
+                        sortExpanded = false
+                    }
+                )
             }
         }
+    }
 
-        Button(
-            onClick = { onPlayThisOrder(filtered) },
-            modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
+    // Botón ↑↓ compacto pero visible
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = if (state.sortAscending)
+            MaterialTheme.colorScheme.primary
+        else
+            MaterialTheme.colorScheme.tertiary,
+        modifier = Modifier
+            .height(44.dp)
+            .clickable { onToggleSortDirection() }
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Default.PlayArrow, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Reproducir este orden", fontWeight = FontWeight.Bold)
+            Icon(
+                imageVector = if (state.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = if (state.sortAscending) "A-Z" else "Z-A",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FilterDropdown(
