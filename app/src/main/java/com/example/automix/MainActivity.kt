@@ -381,7 +381,53 @@ private fun reshuffleQueueHot() {
     Toast.makeText(this, "🔀 Cola re-barajada (${others.size} canciones)", Toast.LENGTH_SHORT).show()
     refreshNow()
 }
+private fun shuffleWithBpmVariety(list: List<Track>): List<Track> {
+    if (list.size < 3) return list.shuffled()
 
+    // Agrupar por rango de BPM (bucket de 10 BPM)
+    val buckets = mutableMapOf<Int, MutableList<Track>>()
+    for (t in list) {
+        val bpm = bpmCache[t.uri.toString()] ?: 0
+        val bucket = if (bpm == 0) -1 else bpm / 10
+        buckets.getOrPut(bucket) { mutableListOf() }.add(t)
+    }
+    // Barajar dentro de cada bucket
+    buckets.values.forEach { it.shuffle() }
+
+    // Alternar entre buckets para evitar monotonía
+    val bucketKeys = buckets.keys.filter { it >= 0 }.shuffled().toMutableList()
+    val result = mutableListOf<Track>()
+    val unknown = buckets[-1]?.toMutableList() ?: mutableListOf()
+
+    while (bucketKeys.isNotEmpty() || unknown.isNotEmpty()) {
+        bucketKeys.shuffle()
+        val iter = bucketKeys.iterator()
+        while (iter.hasNext()) {
+            val key = iter.next()
+            val bucket = buckets[key] ?: continue
+            if (bucket.isEmpty()) {
+                iter.remove()
+            } else {
+                result.add(bucket.removeAt(0))
+            }
+        }
+        if (unknown.isNotEmpty() && result.size % 3 == 0) {
+            result.add(unknown.removeAt(0))
+        }
+    }
+    result.addAll(unknown)
+
+    // 🎲 Re-barajado local: 15% de intercambios entre adyacentes
+    for (i in result.indices) {
+        if (i > 0 && i < result.size - 1 && Math.random() < 0.15) {
+            val j = (i + 1).coerceAtMost(result.size - 1)
+            val tmp = result[i]
+            result[i] = result[j]
+            result[j] = tmp
+        }
+    }
+    return result
+}
     private fun togglePlayPause() {
         val s = svc ?: return
         if (s.current == null && filteredTracks.isNotEmpty()) {
