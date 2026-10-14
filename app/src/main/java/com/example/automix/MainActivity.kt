@@ -221,21 +221,21 @@ class MainActivity : ComponentActivity() {
         }
     },
     onPlayThisOrder = { list ->
-        if (list.isNotEmpty()) {
-            startForegroundService(Intent(this, AutomixService::class.java))
-            svc?.let {
-                it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
-                it.transitionStyle = transitionStyle
-                it.startOrdered(list, 0)
-            }
-        }
+                if (list.isNotEmpty()) {
+                    startForegroundService(Intent(this, AutomixService::class.java))
+                    svc?.let {
+                        it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
+                        it.transitionStyle = transitionStyle
+                        it.startOrdered(list, 0)
+                    }
+                }
+            },
+            onReshuffleQueue = { reshuffleQueueHot() }
+        )
     }
- )
-}        
-            
-        bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
-        ensurePermissions()
-    }
+}
+
+bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
 
     // ---------------- Permisos y biblioteca ----------------
 
