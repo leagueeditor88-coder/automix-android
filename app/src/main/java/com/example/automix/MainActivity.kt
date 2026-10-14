@@ -97,6 +97,11 @@ class MainActivity : ComponentActivity() {
         val currentBpm: Int? = null,
         val currentKey: String? = null,
         val permissionGranted: Boolean = false
+        val searchQuery: String = "",
+val sortField: String = "Título",       // Título, Artista, Álbum, BPM, Género
+val filterArtist: String = "",           // "" = todos
+val filterAlbum: String = "",            // "" = todos
+val filterGenre: String = ""             // "" = todos
     )
 
     private val audioPerm: String =
