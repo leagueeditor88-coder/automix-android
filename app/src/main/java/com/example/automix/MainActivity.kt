@@ -78,8 +78,7 @@ class MainActivity : ComponentActivity() {
     }
     private val collator: java.text.Collator = java.text.Collator.getInstance()
 
-    data class UiSnapshot(
-     val upcomingQueue: List<Track> = emptyList()   
+    data class UiSnapshot( 
     val tracks: List<Track> = emptyList(),
     val current: Track? = null,
     val isPlaying: Boolean = false,
@@ -921,9 +920,9 @@ fun PlayerScreen(
                     // Chips
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        state.currentBpm?.let { Chip("$it BPM") }
-                        state.currentKey?.let { Chip(shortKey(it)) }
-                        Chip("${state.tracks.size} pistas")
+                        state.currentBpm?.let { InfoChip("$it BPM") }
+           state.currentKey?.let { InfoChip(shortKey(it)) }
+           InfoChip("${state.tracks.size} pistas")
                     }
 
                     Spacer(Modifier.height(24.dp))
@@ -1040,7 +1039,7 @@ fun PlayerScreen(
     }
 }
 @Composable
-fun Chip(text: String) {
+fun InfoChip(text: String) {
     Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Text(text, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
