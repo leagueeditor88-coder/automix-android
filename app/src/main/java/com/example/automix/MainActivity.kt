@@ -79,30 +79,30 @@ class MainActivity : ComponentActivity() {
     private val collator: java.text.Collator = java.text.Collator.getInstance()
 
     data class UiSnapshot(
-        val tracks: List<Track> = emptyList(),
-        val current: Track? = null,
-        val isPlaying: Boolean = false,
-        val isPaused: Boolean = false,
-        val sortMode: String = "Aleatorio",
-        val statusText: String = "",
-        val analysisText: String = "Biblioteca: esperando permiso para analizar",
-        val folders: Set<String> = emptySet(),
-        val bpmMap: Map<String, Int> = emptyMap(),
-        val keyMap: Map<String, String> = emptyMap(),
-        val percent: Int = 70,
-        val fadeSec: Int = 8,
-        val skipSec: Int = 0,
-        val transition: String = "Desvanecer",
-        val genre: String? = null,
-        val currentBpm: Int? = null,
-        val currentKey: String? = null,
-        val permissionGranted: Boolean = false
-        val searchQuery: String = "",
-val sortField: String = "Título",       // Título, Artista, Álbum, BPM, Género
-val filterArtist: String = "",           // "" = todos
-val filterAlbum: String = "",            // "" = todos
-val filterGenre: String = ""             // "" = todos
-    )
+    val tracks: List<Track> = emptyList(),
+    val current: Track? = null,
+    val isPlaying: Boolean = false,
+    val isPaused: Boolean = false,
+    val sortMode: String = "Aleatorio",
+    val statusText: String = "",
+    val analysisText: String = "Biblioteca: esperando permiso para analizar",
+    val folders: Set<String> = emptySet(),
+    val bpmMap: Map<String, Int> = emptyMap(),
+    val keyMap: Map<String, String> = emptyMap(),
+    val percent: Int = 70,
+    val fadeSec: Int = 8,
+    val skipSec: Int = 0,
+    val transition: String = "Desvanecer",
+    val genre: String? = null,
+    val currentBpm: Int? = null,
+    val currentKey: String? = null,
+    val permissionGranted: Boolean = false,
+    val searchQuery: String = "",
+    val sortField: String = "Título",
+    val filterArtist: String = "",
+    val filterAlbum: String = "",
+    val filterGenre: String = ""
+)
 
     private val audioPerm: String =
         if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
