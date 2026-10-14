@@ -869,6 +869,168 @@ fun MashupScreen(state: MainActivity.UiSnapshot, onMashup: (Int) -> Unit) {
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun LibraryScreen(
+    state: MainActivity.UiSnapshot,
+    onSearchChange: (String) -> Unit,
+    onSortChange: (String) -> Unit,
+    onFilterArtist: (String) -> Unit,
+    onFilterAlbum: (String) -> Unit,
+    onFilterGenre: (String) -> Unit,
+    onPlayTrack: (List<Track>, Int) -> Unit,
+    onPlayThisOrder: (List<Track>) -> Unit
+) {
+    val filtered = remember(
+        state.tracks, state.searchQuery, state.filterArtist,
+        state.filterAlbum, state.filterGenre, state.sortField, state.bpmMap
+    ) {
+        var list = state.tracks
+        val q = state.searchQuery.trim().lowercase()
+        if (q.isNotEmpty()) {
+            list = list.filter {
+                it.title.lowercase().contains(q) ||
+                it.artist.lowercase().contains(q) ||
+                it.album.lowercase().contains(q)
+            }
+        }
+        if (state.filterArtist.isNotEmpty()) list = list.filter { it.artist == state.filterArtist }
+        if (state.filterAlbum.isNotEmpty()) list = list.filter { it.album == state.filterAlbum }
+        if (state.filterGenre.isNotEmpty()) list = list.filter { it.genre == state.filterGenre }
+        when (state.sortField) {
+            "Artista" -> list.sortedBy { it.artist.lowercase() }
+            "Álbum"   -> list.sortedBy { it.album.lowercase() }
+            "BPM"     -> list.sortedBy { state.bpmMap[it.uri.toString()] ?: Int.MAX_VALUE }
+            "Género"  -> list.sortedBy { it.genre.lowercase() }
+            else      -> list.sortedBy { it.title.lowercase() }
+        }
+    }
+
+    val artists = remember(state.tracks) {
+        listOf("") + state.tracks.map { it.artist }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+    val albums = remember(state.tracks) {
+        listOf("") + state.tracks.map { it.album }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+    val genres = remember(state.tracks) {
+        listOf("") + state.tracks.map { it.genre }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // 🔍 Buscador
+        OutlinedTextField(
+            value = state.searchQuery,
+            onValueChange = onSearchChange,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text("Buscar por título, artista o álbum…") },
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            singleLine = true
+        )
+
+        // 🎚️ Chips de orden
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf("Título", "Artista", "Álbum", "BPM", "Género").forEach { field ->
+                FilterChip(
+                    selected = state.sortField == field,
+                    onClick = { onSortChange(field) },
+                    label = { Text(field, fontSize = 11.sp) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // 🎯 Filtros desplegables
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterDropdown("Artista", artists, state.filterArtist, onFilterArtist, Modifier.weight(1f))
+            FilterDropdown("Álbum", albums, state.filterAlbum, onFilterAlbum, Modifier.weight(1f))
+            FilterDropdown("Género", genres, state.filterGenre, onFilterGenre, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            "${filtered.size} canciones · orden: ${state.sortField}",
+            fontSize = 12.sp, color = Color.Gray,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        // 📜 Lista
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items(filtered) { track ->
+                val idx = filtered.indexOf(track)
+                TrackItem(
+                    track = track,
+                    bpm = state.bpmMap[track.uri.toString()],
+                    key = state.keyMap[track.uri.toString()],
+                    playing = state.current?.uri == track.uri,
+                    onClick = { onPlayTrack(filtered, idx) }
+                )
+            }
+        }
+
+        // ▶ Reproducir este orden
+        Button(
+            onClick = { onPlayThisOrder(filtered) },
+            modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
+            Icon(Icons.Default.PlayArrow, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Reproducir este orden", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FilterDropdown(
+    label: String,
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = if (selected.isEmpty()) label else selected
+    Box(modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+        ) {
+            Text(display, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Todos", fontSize = 13.sp) },
+                onClick = { onSelect(""); expanded = false }
+            )
+            options.filter { it.isNotEmpty() }.forEach { opt ->
+                DropdownMenuItem(
+                    text = { Text(opt, fontSize = 13.sp) },
+                    onClick = { onSelect(opt); expanded = false }
+                )
+            }
+        }
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun SettingsScreen(
     state: MainActivity.UiSnapshot,
     onSetPercent: (Int) -> Unit,
