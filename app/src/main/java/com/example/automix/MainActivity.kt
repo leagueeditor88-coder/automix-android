@@ -1393,6 +1393,7 @@ fun LibraryScreen(
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // 🔍 Buscador
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = onSearchChange,
@@ -1402,50 +1403,94 @@ fun LibraryScreen(
             singleLine = true
         )
 
-        // Chips de orden + botón ⇅
+        // 🎯 Fila de orden: dropdown + botón ↑↓
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("Título", "Artista", "Álbum", "BPM", "Género").forEach { field ->
-                FilterChip(
-                    selected = state.sortField == field,
-                    onClick = { onSortChange(field) },
-                    label = { Text(field, fontSize = 10.sp) }
-                )
+            var sortExpanded by remember { mutableStateOf(false) }
+            Box(Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { sortExpanded = true },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(22.dp)
+                ) {
+                    Icon(Icons.Default.Sort, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Ordenar: ${state.sortField}",
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                DropdownMenu(
+                    expanded = sortExpanded,
+                    onDismissRequest = { sortExpanded = false }
+                ) {
+                    listOf("Título", "Artista", "Álbum", "BPM", "Género").forEach { field ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (state.sortField == field) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                    }
+                                    Text(field, fontSize = 13.sp)
+                                }
+                            },
+                            onClick = {
+                                onSortChange(field)
+                                sortExpanded = false
+                            }
+                        )
+                    }
+                }
             }
-            // Botón ⇅
-            // Botón ascendente/descendente
-Button(
-    onClick = onToggleSortDirection,
-    modifier = Modifier.height(36.dp),
-    shape = RoundedCornerShape(18.dp),
-    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-    colors = ButtonDefaults.buttonColors(
-        containerColor = if (state.sortAscending)
-            MaterialTheme.colorScheme.primary
-        else
-            MaterialTheme.colorScheme.tertiary,
-        contentColor = MaterialTheme.colorScheme.onPrimary
-    )
-) {
-    Icon(
-        imageVector = if (state.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-        contentDescription = null,
-        modifier = Modifier.size(16.dp)
-    )
-    Spacer(Modifier.width(4.dp))
-    Text(
-        text = if (state.sortAscending) "A-Z" else "Z-A",
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold
-    )
-}
-}
+
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = if (state.sortAscending)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier
+                    .height(44.dp)
+                    .clickable { onToggleSortDirection() }
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = if (state.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = if (state.sortAscending) "A-Z" else "Z-A",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+        }
 
         Spacer(Modifier.height(8.dp))
 
+        // Filtros desplegables
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1458,13 +1503,14 @@ Button(
         Spacer(Modifier.height(8.dp))
 
         Text(
-            "${filtered.size} canciones · orden: ${state.sortField} ${if (state.sortAscending) "▲" else "▼"}",
+            "${filtered.size} canciones · ${state.sortField} ${if (state.sortAscending) "▲" else "▼"}",
             fontSize = 12.sp, color = Color.Gray,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         Spacer(Modifier.height(6.dp))
 
+        // Lista
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
@@ -1479,96 +1525,26 @@ Button(
                     playing = state.current?.uri == track.uri,
                     onClick = { onPlayTrack(filtered, idx) }
                 )
-// Fila de orden: dropdown + botón ↑↓
-Row(
-    Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 16.dp),
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-    verticalAlignment = Alignment.CenterVertically
-) {
-    // Dropdown de orden
-    var sortExpanded by remember { mutableStateOf(false) }
-    Box(Modifier.weight(1f)) {
-        OutlinedButton(
-            onClick = { sortExpanded = true },
-            modifier = Modifier.fillMaxWidth().height(44.dp),
-            shape = RoundedCornerShape(22.dp)
-        ) {
-            Icon(
-                Icons.Default.Sort,
-                null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                "Ordenar: ${state.sortField}",
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        DropdownMenu(
-            expanded = sortExpanded,
-            onDismissRequest = { sortExpanded = false }
-        ) {
-            listOf("Título", "Artista", "Álbum", "BPM", "Género").forEach { field ->
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (state.sortField == field) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text(field, fontSize = 13.sp)
-                        }
-                    },
-                    onClick = {
-                        onSortChange(field)
-                        sortExpanded = false
-                    }
-                )
             }
         }
-    }
 
-    // Botón ↑↓ compacto pero visible
-    Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = if (state.sortAscending)
-            MaterialTheme.colorScheme.primary
-        else
-            MaterialTheme.colorScheme.tertiary,
-        modifier = Modifier
-            .height(44.dp)
-            .clickable { onToggleSortDirection() }
-    ) {
-        Row(
-            Modifier.padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        // ▶ Reproducir este orden
+        Button(
+            onClick = { onPlayThisOrder(filtered) },
+            modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
         ) {
-            Icon(
-                imageVector = if (state.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = if (state.sortAscending) "A-Z" else "Z-A",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
+            Icon(Icons.Default.PlayArrow, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Reproducir este orden", fontWeight = FontWeight.Bold)
         }
     }
 }
+    
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FilterDropdown(
