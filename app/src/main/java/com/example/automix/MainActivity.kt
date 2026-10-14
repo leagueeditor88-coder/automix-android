@@ -203,11 +203,35 @@ val filterGenre: String = ""             // "" = todos
                     onDetectBpm = { detectBpmForCurrent() },
                     onDetectKey = { detectKeyForCurrent() },
                     onLookupGenre = { lookupGenreForCurrent() },
-                    onMashup = { second -> startMashup(second) },
-                    onRequestPermissions = { ensurePermissions() }
-                )
+                        onMashup = { second -> startMashup(second) },
+    onRequestPermissions = { ensurePermissions() },
+    onSearchChange = { q -> pushState { it.copy(searchQuery = q) } },
+    onSortFieldChange = { f -> pushState { it.copy(sortField = f) } },
+    onFilterArtist = { a -> pushState { it.copy(filterArtist = a) } },
+    onFilterAlbum = { a -> pushState { it.copy(filterAlbum = a) } },
+    onFilterGenre = { g -> pushState { it.copy(filterGenre = g) } },
+    onPlayFiltered = { list, idx ->
+        if (list.isNotEmpty()) {
+            startForegroundService(Intent(this, AutomixService::class.java))
+            svc?.let {
+                it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
+                it.transitionStyle = transitionStyle
+                it.startOrdered(list, idx)
             }
         }
+    },
+    onPlayThisOrder = { list ->
+        if (list.isNotEmpty()) {
+            startForegroundService(Intent(this, AutomixService::class.java))
+            svc?.let {
+                it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
+                it.transitionStyle = transitionStyle
+                it.startOrdered(list, 0)
+            }
+        }
+    }
+)
+        
 
         bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
         ensurePermissions()
@@ -224,7 +248,6 @@ val filterGenre: String = ""             // "" = todos
         if (needed.isEmpty()) loadLibrary() else permLauncher.launch(needed.toTypedArray())
     }
 
-    private fun loadLibrary() {
     private fun loadLibrary() {
     if (checkSelfPermission(audioPerm) != PackageManager.PERMISSION_GRANTED) return
     val found = mutableListOf<Track>()
