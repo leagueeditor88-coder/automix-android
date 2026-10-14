@@ -26,8 +26,9 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 
-// Modelo Track declarado una sola vez aquí para evitar redeclaraciones
-data class Track(
+// Modelo exclusivo de la UI. Se llama UiTrack para no chocar con
+// el data class Track definido en AutomixService.kt
+data class UiTrack(
     val title: String,
     val artist: String,
     val bpm: String,
@@ -142,10 +143,10 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
     }
 
     val tracks = listOf(
-        Track("Midnight Vibes", "The Sunset Riders", "128 BPM", "C#m", "Pop"),
-        Track("Better Days", "Luna Coast", "122 BPM", "G", "Pop"),
-        Track("Electric Heart", "Neon Waves", "126 BPM", "Em", "Electronic"),
-        Track("Lost in Time", "The Paper Kings", "124 BPM", "Bm", "Indie")
+        UiTrack("Midnight Vibes", "The Sunset Riders", "128 BPM", "C#m", "Pop"),
+        UiTrack("Better Days", "Luna Coast", "122 BPM", "G", "Pop"),
+        UiTrack("Electric Heart", "Neon Waves", "126 BPM", "Em", "Electronic"),
+        UiTrack("Lost in Time", "The Paper Kings", "124 BPM", "Bm", "Indie")
     )
 
     LazyColumn(
@@ -196,7 +197,7 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
 
                     Column {
                         LinearProgressIndicator(
-                            progress = { 0.35f },
+                            progress = 0.35f,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(6.dp)
@@ -220,7 +221,7 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
                     ) {
                         IconButton(onClick = {}) { Icon(Icons.Default.Shuffle, contentDescription = "Aleatorio", tint = MaterialTheme.colorScheme.primary) }
                         IconButton(onClick = {}) { Icon(Icons.Default.SkipPrevious, contentDescription = "Anterior") }
-                        
+
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primary,
@@ -297,7 +298,7 @@ fun MainReproducerScreen(selectedMode: String, onModeChange: (String) -> Unit) {
         items(tracks) { track ->
             TrackItem(track = track)
         }
-        
+
         item {
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -330,7 +331,7 @@ fun ModeButton(title: String, icon: androidx.compose.ui.graphics.vector.ImageVec
 }
 
 @Composable
-fun TrackItem(track: Track) {
+fun TrackItem(track: UiTrack) {
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -387,7 +388,7 @@ fun SettingsScreen() {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Ajustes y análisis en segundo plano", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        
+
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -396,11 +397,11 @@ fun SettingsScreen() {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Transición: Desvanecer", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("Reproducir 70% de cada canción", fontSize = 14.sp, color = Color.Gray)
-                LinearProgressIndicator(progress = { 0.7f }, modifier = Modifier.fillMaxWidth())
-                
+                LinearProgressIndicator(progress = 0.7f, modifier = Modifier.fillMaxWidth())
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Transición: 8 segundos", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                LinearProgressIndicator(progress = { 0.4f }, modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(progress = 0.4f, modifier = Modifier.fillMaxWidth())
             }
         }
     }
