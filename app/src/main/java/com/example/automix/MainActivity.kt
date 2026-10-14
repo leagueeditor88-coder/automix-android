@@ -1478,11 +1478,16 @@ fun LibraryScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = if (state.sortAscending) "A-Z" else "Z-A",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
+                    val dirLabel = when (state.sortField) {
+    "BPM" -> if (state.sortAscending) "Menor ↑" else "Mayor ↓"
+    else  -> if (state.sortAscending) "A-Z" else "Z-A"
+}
+Text(
+    text = dirLabel,
+    fontSize = 12.sp,
+    fontWeight = FontWeight.Bold,
+    color = MaterialTheme.colorScheme.onPrimary
+
                     )
                 }
             }
