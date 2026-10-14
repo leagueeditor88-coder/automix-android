@@ -1552,17 +1552,36 @@ fun SettingsScreen(
                 Text("Estilo de transición", fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Desvanecer", "Ascender").forEach { style ->
-                        FilterChip(selected = state.transition == style, onClick = { onSetTransition(style) },
-                            label = { Text(style) })
+                        FilterChip(
+                            selected = state.transition == style,
+                            onClick = { onSetTransition(style) },
+                            label = { Text(style) }
+                        )
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text("Reproducir ${state.percent}% de cada canción", fontWeight = FontWeight.Bold)
-                Slider(value = state.percent.toFloat(), onValueChange = { onSetPercent(it.toInt()) }, valueRange = 40f..95f)
+                Slider(
+                    value = state.percent.toFloat(),
+                    onValueChange = { onSetPercent(it.toInt()) },
+                    valueRange = 40f..95f
+                )
                 Text("Transición: ${state.fadeSec} segundos", fontWeight = FontWeight.Bold)
-                Slider(value = state.fadeSec.toFloat(), onValueChange = { onSetFade(it.toInt()) }, valueRange = 2f..15f)
-                Text(if (state.skipSec == 0) "No saltar intro" else "Saltar los primeros ${state.skipSec} s", fontWeight = FontWeight.Bold)
-                Slider(value = state.skipSec.toFloat(), onValueChange = { onSetSkip(it.toInt()) }, valueRange = 0f..45f)
+                Slider(
+                    value = state.fadeSec.toFloat(),
+                    onValueChange = { onSetFade(it.toInt()) },
+                    valueRange = 2f..15f
+                )
+                Text(
+                    if (state.skipSec == 0) "No saltar intro"
+                    else "Saltar los primeros ${state.skipSec} s",
+                    fontWeight = FontWeight.Bold
+                )
+                Slider(
+                    value = state.skipSec.toFloat(),
+                    onValueChange = { onSetSkip(it.toInt()) },
+                    valueRange = 0f..45f
+                )
             }
         }
 
