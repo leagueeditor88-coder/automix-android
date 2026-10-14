@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -15,6 +16,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,10 +35,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -72,39 +80,41 @@ class MainActivity : ComponentActivity() {
     private var currentGenre: String? = null
 
     private val uiState = mutableStateOf(UiSnapshot())
-    
+
     private fun pushState(update: (UiSnapshot) -> UiSnapshot) {
-    uiState.value = update(uiState.value)
+        uiState.value = update(uiState.value)
     }
     private val collator: java.text.Collator = java.text.Collator.getInstance()
 
-    data class UiSnapshot( 
-    val tracks: List<Track> = emptyList(),
-    val current: Track? = null,
-    val isPlaying: Boolean = false,
-    val isPaused: Boolean = false,
-    val sortMode: String = "Aleatorio",
-    val statusText: String = "",
-    val analysisText: String = "Biblioteca: esperando permiso para analizar",
-    val folders: Set<String> = emptySet(),
-    val bpmMap: Map<String, Int> = emptyMap(),
-    val keyMap: Map<String, String> = emptyMap(),
-    val percent: Int = 70,
-    val fadeSec: Int = 8,
-    val skipSec: Int = 0,
-    val transition: String = "Desvanecer",
-    val genre: String? = null,
-    val currentBpm: Int? = null,
-    val currentKey: String? = null,
-    val permissionGranted: Boolean = false,
-    val searchQuery: String = "",
-    val sortField: String = "Título",
-    val filterArtist: String = "",
-    val filterAlbum: String = "",
-    val filterGenre: String = "",
-    val upcomingQueue: List<Track> = emptyList()
-)  
-
+    data class UiSnapshot(
+        val tracks: List<Track> = emptyList(),
+        val current: Track? = null,
+        val isPlaying: Boolean = false,
+        val isPaused: Boolean = false,
+        val sortMode: String = "Aleatorio",
+        val statusText: String = "",
+        val analysisText: String = "Biblioteca: esperando permiso para analizar",
+        val folders: Set<String> = emptySet(),
+        val bpmMap: Map<String, Int> = emptyMap(),
+        val keyMap: Map<String, String> = emptyMap(),
+        val percent: Int = 70,
+        val fadeSec: Int = 8,
+        val skipSec: Int = 0,
+        val transition: String = "Desvanecer",
+        val genre: String? = null,
+        val currentBpm: Int? = null,
+        val currentKey: String? = null,
+        val permissionGranted: Boolean = false,
+        val searchQuery: String = "",
+        val sortField: String = "Título",
+        val sortAscending: Boolean = true,
+        val filterArtist: String = "",
+        val filterAlbum: String = "",
+        val filterGenre: String = "",
+        val upcomingQueue: List<Track> = emptyList(),
+        val positionMs: Int = 0,
+        val durationMs: Int = 0
+    )
 
     private val audioPerm: String =
         if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
@@ -205,43 +215,44 @@ class MainActivity : ComponentActivity() {
                     onDetectBpm = { detectBpmForCurrent() },
                     onDetectKey = { detectKeyForCurrent() },
                     onLookupGenre = { lookupGenreForCurrent() },
-                        onMashup = { second -> startMashup(second) },
-    onRequestPermissions = { ensurePermissions() },
-    onSearchChange = { q -> pushState { it.copy(searchQuery = q) } },
-    onSortFieldChange = { f -> pushState { it.copy(sortField = f) } },
-    onFilterArtist = { a -> pushState { it.copy(filterArtist = a) } },
-    onFilterAlbum = { a -> pushState { it.copy(filterAlbum = a) } },
-    onFilterGenre = { g -> pushState { it.copy(filterGenre = g) } },
-    onPlayFiltered = { list, idx ->
-        if (list.isNotEmpty()) {
-            startForegroundService(Intent(this, AutomixService::class.java))
-            svc?.let {
-                it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
-                it.transitionStyle = transitionStyle
-                it.startOrdered(list, idx)
+                    onMashup = { second -> startMashup(second) },
+                    onRequestPermissions = { ensurePermissions() },
+                    onSearchChange = { q -> pushState { it.copy(searchQuery = q) } },
+                    onSortFieldChange = { f -> pushState { it.copy(sortField = f) } },
+                    onToggleSortDirection = { pushState { it.copy(sortAscending = !it.sortAscending) } },
+                    onFilterArtist = { a -> pushState { it.copy(filterArtist = a) } },
+                    onFilterAlbum = { a -> pushState { it.copy(filterAlbum = a) } },
+                    onFilterGenre = { g -> pushState { it.copy(filterGenre = g) } },
+                    onSeek = { ms -> svc?.seekTo(ms) },
+                    onPlayFiltered = { list, idx ->
+                        if (list.isNotEmpty()) {
+                            startForegroundService(Intent(this, AutomixService::class.java))
+                            svc?.let {
+                                it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
+                                it.transitionStyle = transitionStyle
+                                it.startOrdered(list, idx)
+                            }
+                        }
+                    },
+                    onPlayThisOrder = { list ->
+                        if (list.isNotEmpty()) {
+                            startForegroundService(Intent(this, AutomixService::class.java))
+                            svc?.let {
+                                it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
+                                it.transitionStyle = transitionStyle
+                                it.startOrdered(list, 0)
+                            }
+                        }
+                    },
+                    onReshuffleQueue = { reshuffleQueueHot() }
+                )
             }
         }
-    },
-    onPlayThisOrder = { list ->
-                if (list.isNotEmpty()) {
-                    startForegroundService(Intent(this, AutomixService::class.java))
-                    svc?.let {
-                        it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
-                        it.transitionStyle = transitionStyle
-                        it.startOrdered(list, 0)
-                    }
-                }
-            },
-              onReshuffleQueue = { reshuffleQueueHot() }
-            )
-        }
+
+        bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
+        ensurePermissions()
     }
 
-    bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
-    ensurePermissions()
-}
-
-// ---------------- Permisos y biblioteca ----------------
     // ---------------- Permisos y biblioteca ----------------
 
     private fun ensurePermissions() {
@@ -254,49 +265,52 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadLibrary() {
-    if (checkSelfPermission(audioPerm) != PackageManager.PERMISSION_GRANTED) return
-    val found = mutableListOf<Track>()
-    val proj = arrayOf(
-        Media._ID, Media.TITLE, Media.ARTIST, Media.DURATION, Media.DATA,
-        Media.ALBUM, Media.GENRE
-    )
-    contentResolver.query(
-        Media.EXTERNAL_CONTENT_URI, proj,
-        "${Media.IS_MUSIC} != 0 AND ${Media.DURATION} >= 60000",
-        null, "${Media.TITLE} COLLATE NOCASE ASC"
-    )?.use { c ->
-        val iId = c.getColumnIndex(Media._ID)
-        val iTitle = c.getColumnIndex(Media.TITLE)
-        val iArtist = c.getColumnIndex(Media.ARTIST)
-        val iDur = c.getColumnIndex(Media.DURATION)
-        val iData = c.getColumnIndex(Media.DATA)
-        val iAlbum = c.getColumnIndex(Media.ALBUM)
-        val iGenre = c.getColumnIndex(Media.GENRE)
-        while (c.moveToNext()) {
-            val path = if (iData >= 0) c.getString(iData) else null
-            val album = if (iAlbum >= 0) c.getString(iAlbum) ?: "" else ""
-            val genre = if (iGenre >= 0) c.getString(iGenre)?.takeIf { it != "<unknown>" } ?: "" else ""
-            found += Track(
-                ContentUris.withAppendedId(Media.EXTERNAL_CONTENT_URI, c.getLong(iId)),
-                c.getString(iTitle) ?: "Sin título",
-                if (iArtist >= 0) c.getString(iArtist)?.takeIf { it != "<unknown>" } ?: "Artista desconocido"
-                else "Artista desconocido",
-                c.getLong(iDur),
-                path?.let { File(it).parent } ?: "Música",
-                album,
-                genre
-            )
+        if (checkSelfPermission(audioPerm) != PackageManager.PERMISSION_GRANTED) return
+        val found = mutableListOf<Track>()
+        val proj = arrayOf(
+            Media._ID, Media.TITLE, Media.ARTIST, Media.DURATION, Media.DATA,
+            Media.ALBUM, Media.GENRE, Media.ALBUM_ID
+        )
+        contentResolver.query(
+            Media.EXTERNAL_CONTENT_URI, proj,
+            "${Media.IS_MUSIC} != 0 AND ${Media.DURATION} >= 60000",
+            null, "${Media.TITLE} COLLATE NOCASE ASC"
+        )?.use { c ->
+            val iId = c.getColumnIndex(Media._ID)
+            val iTitle = c.getColumnIndex(Media.TITLE)
+            val iArtist = c.getColumnIndex(Media.ARTIST)
+            val iDur = c.getColumnIndex(Media.DURATION)
+            val iData = c.getColumnIndex(Media.DATA)
+            val iAlbum = c.getColumnIndex(Media.ALBUM)
+            val iGenre = c.getColumnIndex(Media.GENRE)
+            val iAlbumId = c.getColumnIndex(Media.ALBUM_ID)
+            while (c.moveToNext()) {
+                val path = if (iData >= 0) c.getString(iData) else null
+                val album = if (iAlbum >= 0) c.getString(iAlbum) ?: "" else ""
+                val genre = if (iGenre >= 0) c.getString(iGenre)?.takeIf { it != "<unknown>" } ?: "" else ""
+                val albumId = if (iAlbumId >= 0) c.getLong(iAlbumId) else -1L
+                found += Track(
+                    ContentUris.withAppendedId(Media.EXTERNAL_CONTENT_URI, c.getLong(iId)),
+                    c.getString(iTitle) ?: "Sin título",
+                    if (iArtist >= 0) c.getString(iArtist)?.takeIf { it != "<unknown>" } ?: "Artista desconocido"
+                    else "Artista desconocido",
+                    c.getLong(iDur),
+                    path?.let { File(it).parent } ?: "Música",
+                    album,
+                    genre,
+                    albumId
+                )
+            }
         }
-    }
-    allTracks = found
-    randomRank = allTracks.shuffled().mapIndexed { i, t -> t.uri.toString() to i }.toMap()
-    applyFolderFilter()
-    if (found.isEmpty()) {
-        pushState { it.copy(statusText = "No encontré canciones en el dispositivo", permissionGranted = true) }
-    } else {
-        pushState { it.copy(permissionGranted = true) }
-        analyzeLibraryInBackground()
-    }
+        allTracks = found
+        randomRank = allTracks.shuffled().mapIndexed { i, t -> t.uri.toString() to i }.toMap()
+        applyFolderFilter()
+        if (found.isEmpty()) {
+            pushState { it.copy(statusText = "No encontré canciones en el dispositivo", permissionGranted = true) }
+        } else {
+            pushState { it.copy(permissionGranted = true) }
+            analyzeLibraryInBackground()
+        }
     }
 
     private fun applyFolderFilter() {
@@ -395,100 +409,93 @@ class MainActivity : ComponentActivity() {
     }
 
     // ---------------- Reproducción ----------------
-
-    private fun playAt(index: Int) {
-    val display = buildDisplayList()
-    if (display.isEmpty()) { 
-        Toast.makeText(this, "No hay canciones cargadas", Toast.LENGTH_SHORT).show()
-        return 
+private fun playAt(index: Int) {
+        val display = buildDisplayList()
+        if (display.isEmpty()) {
+            Toast.makeText(this, "No hay canciones cargadas", Toast.LENGTH_SHORT).show()
+            return
+        }
+        startForegroundService(Intent(this, AutomixService::class.java))
+        svc?.let {
+            it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
+            it.transitionStyle = transitionStyle
+            it.startOrdered(display, index.coerceAtLeast(0))
+        }
     }
-    startForegroundService(Intent(this, AutomixService::class.java))
-    svc?.let {
-        it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
-        it.transitionStyle = transitionStyle
-        it.startOrdered(display, index.coerceAtLeast(0))
+
+    private fun reshuffleQueueHot() {
+        val s = svc
+        if (s?.current == null) {
+            Toast.makeText(this, "Reproduce algo primero", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val currentUri = s.current?.uri
+        val currentTrack = filteredTracks.firstOrNull { it.uri == currentUri }
+        val others = filteredTracks.filter { it.uri != currentUri }.shuffled()
+        val newQueue = if (currentTrack != null) listOf(currentTrack) + others else others
+        s.reorderQueue(newQueue)
+        Toast.makeText(this, "🔀 Cola re-barajada (${others.size} canciones)", Toast.LENGTH_SHORT).show()
+        refreshNow()
     }
-}
 
-private fun reshuffleQueueHot() {
-    val s = svc
-    if (s?.current == null) {
-        Toast.makeText(this, "Reproduce algo primero", Toast.LENGTH_SHORT).show()
-        return
-    }
-    val currentUri = s.current?.uri
-    val currentTrack = filteredTracks.firstOrNull { it.uri == currentUri }
-    val others = filteredTracks.filter { it.uri != currentUri }.shuffled()
-    val newQueue = if (currentTrack != null) listOf(currentTrack) + others else others
-    s.reorderQueue(newQueue)
-    Toast.makeText(this, "🔀 Cola re-barajada (${others.size} canciones)", Toast.LENGTH_SHORT).show()
-    refreshNow()
-}
-private fun shuffleWithBpmVariety(list: List<Track>): List<Track> {
-    if (list.size < 3) return list.shuffled()
-
-    // Agrupar por rango de BPM (bucket de 10 BPM)
-    val buckets = mutableMapOf<Int, MutableList<Track>>()
-    for (t in list) {
-        val bpm = bpmCache[t.uri.toString()] ?: 0
-        val bucket = if (bpm == 0) -1 else bpm / 10
-        buckets.getOrPut(bucket) { mutableListOf() }.add(t)
-    }
-    // Barajar dentro de cada bucket
-    buckets.values.forEach { it.shuffle() }
-
-    // Alternar entre buckets para evitar monotonía
-    val bucketKeys = buckets.keys.filter { it >= 0 }.shuffled().toMutableList()
-    val result = mutableListOf<Track>()
-    val unknown = buckets[-1]?.toMutableList() ?: mutableListOf()
-
-    while (bucketKeys.isNotEmpty() || unknown.isNotEmpty()) {
-        bucketKeys.shuffle()
-        val iter = bucketKeys.iterator()
-        while (iter.hasNext()) {
-            val key = iter.next()
-            val bucket = buckets[key] ?: continue
-            if (bucket.isEmpty()) {
-                iter.remove()
-            } else {
-                result.add(bucket.removeAt(0))
+    private fun shuffleWithBpmVariety(list: List<Track>): List<Track> {
+        if (list.size < 3) return list.shuffled()
+        val buckets = mutableMapOf<Int, MutableList<Track>>()
+        for (t in list) {
+            val bpm = bpmCache[t.uri.toString()] ?: 0
+            val bucket = if (bpm == 0) -1 else bpm / 10
+            buckets.getOrPut(bucket) { mutableListOf() }.add(t)
+        }
+        buckets.values.forEach { it.shuffle() }
+        val bucketKeys = buckets.keys.filter { it >= 0 }.shuffled().toMutableList()
+        val result = mutableListOf<Track>()
+        val unknown = buckets[-1]?.toMutableList() ?: mutableListOf()
+        while (bucketKeys.isNotEmpty() || unknown.isNotEmpty()) {
+            bucketKeys.shuffle()
+            val iter = bucketKeys.iterator()
+            while (iter.hasNext()) {
+                val key = iter.next()
+                val bucket = buckets[key] ?: continue
+                if (bucket.isEmpty()) {
+                    iter.remove()
+                } else {
+                    result.add(bucket.removeAt(0))
+                }
+            }
+            if (unknown.isNotEmpty() && result.size % 3 == 0) {
+                result.add(unknown.removeAt(0))
             }
         }
-        if (unknown.isNotEmpty() && result.size % 3 == 0) {
-            result.add(unknown.removeAt(0))
+        result.addAll(unknown)
+        for (i in result.indices) {
+            if (i > 0 && i < result.size - 1 && Math.random() < 0.15) {
+                val j = (i + 1).coerceAtMost(result.size - 1)
+                val tmp = result[i]
+                result[i] = result[j]
+                result[j] = tmp
+            }
         }
+        return result
     }
-    result.addAll(unknown)
 
-    // 🎲 Re-barajado local: 15% de intercambios entre adyacentes
-    for (i in result.indices) {
-        if (i > 0 && i < result.size - 1 && Math.random() < 0.15) {
-            val j = (i + 1).coerceAtMost(result.size - 1)
-            val tmp = result[i]
-            result[i] = result[j]
-            result[j] = tmp
+    private fun playRandom() {
+        if (filteredTracks.isEmpty()) {
+            Toast.makeText(this, "No hay canciones cargadas", Toast.LENGTH_SHORT).show()
+            return
         }
+        val shuffled = shuffleWithBpmVariety(filteredTracks)
+        startForegroundService(Intent(this, AutomixService::class.java))
+        svc?.let {
+            it.playPercent = percent
+            it.fadeSec = fade
+            it.skipIntroSec = skip
+            it.transitionStyle = transitionStyle
+            it.startOrdered(shuffled, 0)
+        }
+        Toast.makeText(this, "🎲 Nueva mezcla: ${shuffled.size} canciones", Toast.LENGTH_SHORT).show()
+        refreshNow()
     }
-    return result
-}
 
-private fun playRandom() {
-    if (filteredTracks.isEmpty()) {
-        Toast.makeText(this, "No hay canciones cargadas", Toast.LENGTH_SHORT).show()
-        return
-    }
-    val shuffled = shuffleWithBpmVariety(filteredTracks)
-    startForegroundService(Intent(this, AutomixService::class.java))
-    svc?.let {
-        it.playPercent = percent
-        it.fadeSec = fade
-        it.skipIntroSec = skip
-        it.transitionStyle = transitionStyle
-        it.startOrdered(shuffled, 0)
-    }
-    Toast.makeText(this, "🎲 Nueva mezcla: ${shuffled.size} canciones", Toast.LENGTH_SHORT).show()
-    refreshNow()
-}
     private fun togglePlayPause() {
         val s = svc ?: return
         if (s.current == null && filteredTracks.isNotEmpty()) {
@@ -510,8 +517,7 @@ private fun playRandom() {
 
     // ---------------- Análisis ----------------
 
-    
-            private fun analyzeLibraryInBackground() {
+    private fun analyzeLibraryInBackground() {
         if (analysisRunning) return
         analysisRunning = true
         Thread {
@@ -579,47 +585,114 @@ private fun playRandom() {
         }.start()
     }
 
+    // ---------------- Búsqueda de género en cascada ----------------
+
     private fun lookupGenreForCurrent() {
         val t = svc?.current ?: run { Toast.makeText(this, "Reproduce una canción primero", Toast.LENGTH_SHORT).show(); return }
-        pushState { it.copy(genre = "Consultando MusicBrainz…") }
+        pushState { it.copy(genre = "Consultando Wikipedia…") }
         Thread {
-            val result = lookupGenreOnline(t.title, t.artist)
-            runOnUiThread { pushState { it.copy(genre = result ?: "Sin coincidencias") } }
+            var result = lookupGenreWikipedia(t.title, t.artist)
+            if (result == null) result = lookupGenreDeezer(t.title, t.artist)
+            val finalResult = result ?: "No se encontró género en Wikipedia ni Deezer"
+            runOnUiThread { pushState { it.copy(genre = finalResult) } }
         }.start()
     }
 
-    private fun lookupGenreOnline(title: String, artist: String): String? {
-        fun req(url: String): JSONObject? {
-            var c: HttpURLConnection? = null
-            return try {
-                c = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"; connectTimeout = 10000; readTimeout = 10000
-                    setRequestProperty("User-Agent", "AutomixAndroid/1.2")
-                    setRequestProperty("Accept", "application/json")
-                }
-                if (c.responseCode !in 200..299) null
-                else JSONObject(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-            } catch (_: Exception) { null } finally { c?.disconnect() }
+    private fun lookupGenreWikipedia(title: String, artist: String): String? {
+        val encodedTitle = URLEncoder.encode("$title $artist", "UTF-8")
+        val searchUrl = "https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=$encodedTitle&format=json&formatversion=2&srlimit=3"
+        val searchJson = req(searchUrl) ?: return null
+        val results = searchJson.optJSONObject("query")?.optJSONArray("search") ?: return null
+        for (i in 0 until results.length()) {
+            val page = results.optJSONObject(i) ?: continue
+            val pageId = page.optInt("pageid", -1)
+            if (pageId <= 0) continue
+            val qid = getWikidataIdFromPageId(pageId) ?: continue
+            val genre = getGenreFromWikidata(qid)
+            if (genre != null) return "Género: $genre"
         }
-        return try {
-            val q = URLEncoder.encode("recording:\"${title.replace("\"", " ")}\" AND artist:\"${artist.replace("\"", " ")}\"", "UTF-8")
-            val search = req("https://musicbrainz.org/ws/2/recording/?query=$q&fmt=json&limit=5") ?: return null
-            val recs = search.optJSONArray("recordings") ?: return null
-            for (i in 0 until recs.length()) {
-                val item = recs.optJSONObject(i) ?: continue
-                val id = item.optString("id", "").takeIf { it.isNotBlank() } ?: continue
-                val detail = req("https://musicbrainz.org/ws/2/recording/$id?inc=genres+tags&fmt=json") ?: continue
-                val genres = linkedSetOf<String>()
-                listOf("genres", "tags").forEach { name ->
-                    val arr = detail.optJSONArray(name) ?: return@forEach
-                    for (j in 0 until arr.length()) {
-                        arr.optJSONObject(j)?.optString("name", "")?.takeIf { it.isNotBlank() }?.let { genres.add(it) }
-                    }
-                }
-                if (genres.isNotEmpty()) return "Género: ${genres.take(5).joinToString(", ")}"
+        return null
+    }
+
+    private fun getWikidataIdFromPageId(pageId: Int): String? {
+        val url = "https://es.wikipedia.org/w/api.php?action=query&prop=pageprops&pageids=$pageId&format=json&formatversion=2"
+        val json = req(url) ?: return null
+        val pages = json.optJSONObject("query")?.optJSONArray("pages") ?: return null
+        val page = pages.optJSONObject(0) ?: return null
+        return page.optJSONObject("pageprops")?.optString("wikibase_item", null)
+    }
+
+    private fun getGenreFromWikidata(qid: String): String? {
+        val url = "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=$qid&props=claims&format=json"
+        val json = req(url) ?: return null
+        val entity = json.optJSONObject("entities")?.optJSONObject(qid) ?: return null
+        val claims = entity.optJSONObject("claims") ?: return null
+        val genreClaims = claims.optJSONArray("P136") ?: return null
+        val genres = linkedSetOf<String>()
+        for (i in 0 until genreClaims.length()) {
+            val claim = genreClaims.optJSONObject(i) ?: continue
+            val mainsnak = claim.optJSONObject("mainsnak") ?: continue
+            val datavalue = mainsnak.optJSONObject("datavalue") ?: continue
+            val value = datavalue.optJSONObject("value") ?: continue
+            val genreQid = value.optString("id", "")
+            if (genreQid.isNotBlank()) {
+                val label = getLabelFromWikidata(genreQid)
+                if (label != null) genres.add(label)
             }
+        }
+        return if (genres.isEmpty()) null else genres.take(5).joinToString(", ")
+    }
+
+    private fun getLabelFromWikidata(qid: String): String? {
+        val url = "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=$qid&props=labels&languages=es|en&format=json"
+        val json = req(url) ?: return null
+        val entity = json.optJSONObject("entities")?.optJSONObject(qid) ?: return null
+        val labels = entity.optJSONObject("labels") ?: return null
+        return labels.optJSONObject("es")?.optString("value")
+            ?: labels.optJSONObject("en")?.optString("value")
+    }
+
+    private fun lookupGenreDeezer(title: String, artist: String): String? {
+        val query = URLEncoder.encode("$artist $title", "UTF-8")
+        val searchUrl = "https://api.deezer.com/search?q=$query&limit=5"
+        val searchJson = req(searchUrl) ?: return null
+        val tracks = searchJson.optJSONArray("data") ?: return null
+        for (i in 0 until tracks.length()) {
+            val track = tracks.optJSONObject(i) ?: continue
+            val album = track.optJSONObject("album") ?: continue
+            val albumId = album.optLong("id", -1)
+            if (albumId <= 0) continue
+            val albumJson = req("https://api.deezer.com/album/$albumId") ?: continue
+            val genreArr = albumJson.optJSONObject("genres")?.optJSONArray("data") ?: continue
+            val genreNames = mutableListOf<String>()
+            for (j in 0 until genreArr.length()) {
+                val g = genreArr.optJSONObject(j)?.optString("name", "")?.takeIf { it.isNotBlank() }
+                if (g != null) genreNames.add(g)
+            }
+            if (genreNames.isNotEmpty()) {
+                return "Género (Deezer): ${genreNames.take(3).joinToString(", ")}"
+            }
+        }
+        return null
+    }
+
+    private fun req(url: String): JSONObject? {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 10000
+                setRequestProperty("User-Agent", "AutomixAndroid/1.4 (genre lookup)")
+                setRequestProperty("Accept", "application/json")
+            }
+            if (conn.responseCode !in 200..299) null
+            else JSONObject(conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+        } catch (_: Exception) {
             null
-        } catch (_: Exception) { null }
+        } finally {
+            conn?.disconnect()
+        }
     }
 
     // ---------------- Refresh de UI ----------------
@@ -628,6 +701,7 @@ private fun playRandom() {
         val s = svc
         val t = s?.current
         val upcoming = s?.getUpcomingQueue(2) ?: emptyList()
+        val (pos, dur) = s?.getProgress() ?: (0 to 0)
         val display = buildDisplayList()
         pushState {
             it.copy(
@@ -639,7 +713,9 @@ private fun playRandom() {
                 currentKey = t?.let { tr -> keyCache[tr.uri.toString()] },
                 bpmMap = bpmCache.toMap(),
                 keyMap = keyCache.toMap(),
-                upcomingQueue = upcoming
+                upcomingQueue = upcoming,
+                positionMs = pos,
+                durationMs = dur
             )
         }
     }
@@ -670,6 +746,62 @@ fun AutomixTheme(content: @Composable () -> Unit) {
     )
 }
 
+fun formatTime(ms: Int): String {
+    val totalSec = ms / 1000
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return "%d:%02d".format(min, sec)
+}
+
+@Composable
+fun AlbumArt(albumId: Long, size: Dp) {
+    val context = LocalContext.current
+    var bitmap by remember(albumId) { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    LaunchedEffect(albumId) {
+        if (albumId > 0) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val uri = ContentUris.withAppendedId(
+                        Uri.parse("content://media/external/audio/albumart"),
+                        albumId
+                    )
+                    val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
+                    } else {
+                        android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                    }
+                    withContext(Dispatchers.Main) { bitmap = bmp }
+                } catch (_: Exception) { /* sin carátula */ }
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Default.MusicNote,
+                null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(size / 2)
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutomixApp(
@@ -692,17 +824,18 @@ fun AutomixApp(
     onMashup: (Int) -> Unit,
     onRequestPermissions: () -> Unit,
     onReshuffleQueue: () -> Unit,
-    // 🆕 Biblioteca
     onSearchChange: (String) -> Unit,
     onSortFieldChange: (String) -> Unit,
+    onToggleSortDirection: () -> Unit,
     onFilterArtist: (String) -> Unit,
     onFilterAlbum: (String) -> Unit,
     onFilterGenre: (String) -> Unit,
+    onSeek: (Int) -> Unit,
     onPlayFiltered: (List<Track>, Int) -> Unit,
     onPlayThisOrder: (List<Track>) -> Unit
 ) {
     var tab by remember { mutableStateOf(0) }
-Scaffold(
+    Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("AUTOMIX", fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, color = MaterialTheme.colorScheme.primary) },
@@ -749,12 +882,14 @@ Scaffold(
                     onPlayTrack = onPlayTrack,
                     onStartAutomix = onStartAutomix,
                     onSetSort = onSetSort,
-                    onRequestPermissions = onRequestPermissions
+                    onRequestPermissions = onRequestPermissions,
+                    onSeek = onSeek
                 )
                 1 -> LibraryScreen(
                     state = state,
                     onSearchChange = onSearchChange,
                     onSortChange = onSortFieldChange,
+                    onToggleSortDirection = onToggleSortDirection,
                     onFilterArtist = onFilterArtist,
                     onFilterAlbum = onFilterAlbum,
                     onFilterGenre = onFilterGenre,
@@ -776,7 +911,7 @@ Scaffold(
         }
     }
 }
-    
+
 @Composable
 fun PlayerScreen(
     state: MainActivity.UiSnapshot,
@@ -787,7 +922,8 @@ fun PlayerScreen(
     onPlayTrack: (Int) -> Unit,
     onStartAutomix: () -> Unit,
     onSetSort: (String) -> Unit,
-    onRequestPermissions: () -> Unit
+    onRequestPermissions: () -> Unit,
+    onSeek: (Int) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -796,7 +932,6 @@ fun PlayerScreen(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ─── Tarjeta principal (grande) ───
         item {
             Spacer(Modifier.height(8.dp))
             Card(
@@ -811,25 +946,13 @@ fun PlayerScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Portada
-                    Box(
-                        Modifier
-                            .size(160.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.MusicNote,
-                            null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(72.dp)
-                        )
-                    }
+                    AlbumArt(
+                        albumId = state.current?.albumId ?: -1L,
+                        size = 160.dp
+                    )
 
                     Spacer(Modifier.height(20.dp))
 
-                    // Título y artista
                     Text(
                         state.current?.title ?: "Sin reproducción",
                         fontWeight = FontWeight.Bold,
@@ -846,17 +969,44 @@ fun PlayerScreen(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    // Chips
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         state.currentBpm?.let { InfoChip("$it BPM") }
-           state.currentKey?.let { InfoChip(shortKey(it)) }
-           InfoChip("${state.tracks.size} pistas")
+                        state.currentKey?.let { InfoChip(shortKey(it)) }
+                        InfoChip("${state.tracks.size} pistas")
                     }
 
-                    Spacer(Modifier.height(24.dp))
+                    // 🎯 Barra de progreso interactiva
+                    
+             Spacer(Modifier.height(16.dp))
+                    var isDragging by remember { mutableStateOf(false) }
+                    var dragValue by remember { mutableFloatStateOf(0f) }
+                    val dur = state.durationMs.coerceAtLeast(1)
+                    val sliderPos = if (isDragging) dragValue else state.positionMs.toFloat()
 
-                    // Botón AUTOMIX grande
+                    Slider(
+                        value = sliderPos.coerceIn(0f, dur.toFloat()),
+                        onValueChange = {
+                            isDragging = true
+                            dragValue = it
+                        },
+                        onValueChangeFinished = {
+                            onSeek(dragValue.toInt())
+                            isDragging = false
+                        },
+                        valueRange = 0f..dur.toFloat(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(formatTime(sliderPos.toInt()), fontSize = 11.sp, color = Color.Gray)
+                        Text(formatTime(state.durationMs), fontSize = 11.sp, color = Color.Gray)
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
                     Button(
                         onClick = onStartAutomix,
                         modifier = Modifier
@@ -880,7 +1030,6 @@ fun PlayerScreen(
 
                     Spacer(Modifier.height(20.dp))
 
-                    // Controles
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround,
@@ -914,7 +1063,6 @@ fun PlayerScreen(
             }
         }
 
-        // ─── Barra de cola compacta (2 canciones) ───
         item {
             if (state.upcomingQueue.isNotEmpty()) {
                 CompactQueue(
@@ -928,7 +1076,6 @@ fun PlayerScreen(
             }
         }
 
-        // ─── Modos de orden ───
         item {
             Row(
                 Modifier.fillMaxWidth(),
@@ -940,7 +1087,6 @@ fun PlayerScreen(
             }
         }
 
-        // ─── Aviso de permisos ───
         if (!state.permissionGranted && state.tracks.isEmpty()) {
             item {
                 Text(
@@ -951,7 +1097,6 @@ fun PlayerScreen(
             }
         }
 
-        // ─── Botón discreto para recargar ───
         item {
             TextButton(
                 onClick = onRequestPermissions,
@@ -967,6 +1112,7 @@ fun PlayerScreen(
         }
     }
 }
+
 @Composable
 fun InfoChip(text: String) {
     Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -1014,6 +1160,7 @@ fun TrackItem(track: Track, bpm: Int?, key: String?, playing: Boolean, onClick: 
         }
     }
 }
+
 @Composable
 fun CompactQueue(
     upcoming: List<Track>,
@@ -1029,7 +1176,6 @@ fun CompactQueue(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            // Cabecera con contador y botón expandir
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1109,6 +1255,7 @@ fun CompactQueue(
         }
     }
 }
+
 @Composable
 fun MashupScreen(state: MainActivity.UiSnapshot, onMashup: (Int) -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1136,12 +1283,14 @@ fun MashupScreen(state: MainActivity.UiSnapshot, onMashup: (Int) -> Unit) {
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     state: MainActivity.UiSnapshot,
     onSearchChange: (String) -> Unit,
     onSortChange: (String) -> Unit,
+    onToggleSortDirection: () -> Unit,
     onFilterArtist: (String) -> Unit,
     onFilterAlbum: (String) -> Unit,
     onFilterGenre: (String) -> Unit,
@@ -1150,7 +1299,8 @@ fun LibraryScreen(
 ) {
     val filtered = remember(
         state.tracks, state.searchQuery, state.filterArtist,
-        state.filterAlbum, state.filterGenre, state.sortField, state.bpmMap
+        state.filterAlbum, state.filterGenre, state.sortField,
+        state.sortAscending, state.bpmMap
     ) {
         var list = state.tracks
         val q = state.searchQuery.trim().lowercase()
@@ -1164,12 +1314,14 @@ fun LibraryScreen(
         if (state.filterArtist.isNotEmpty()) list = list.filter { it.artist == state.filterArtist }
         if (state.filterAlbum.isNotEmpty()) list = list.filter { it.album == state.filterAlbum }
         if (state.filterGenre.isNotEmpty()) list = list.filter { it.genre == state.filterGenre }
+        val asc = state.sortAscending
         when (state.sortField) {
-            "Artista" -> list.sortedBy { it.artist.lowercase() }
-            "Álbum"   -> list.sortedBy { it.album.lowercase() }
-            "BPM"     -> list.sortedBy { state.bpmMap[it.uri.toString()] ?: Int.MAX_VALUE }
-            "Género"  -> list.sortedBy { it.genre.lowercase() }
-            else      -> list.sortedBy { it.title.lowercase() }
+            "Artista" -> if (asc) list.sortedBy { it.artist.lowercase() } else list.sortedByDescending { it.artist.lowercase() }
+            "Álbum"   -> if (asc) list.sortedBy { it.album.lowercase() } else list.sortedByDescending { it.album.lowercase() }
+            "BPM"     -> if (asc) list.sortedBy { state.bpmMap[it.uri.toString()] ?: Int.MAX_VALUE }
+                          else list.sortedByDescending { state.bpmMap[it.uri.toString()] ?: Int.MIN_VALUE }
+            "Género"  -> if (asc) list.sortedBy { it.genre.lowercase() } else list.sortedByDescending { it.genre.lowercase() }
+            else      -> if (asc) list.sortedBy { it.title.lowercase() } else list.sortedByDescending { it.title.lowercase() }
         }
     }
 
@@ -1184,7 +1336,6 @@ fun LibraryScreen(
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // 🔍 Buscador
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = onSearchChange,
@@ -1194,23 +1345,38 @@ fun LibraryScreen(
             singleLine = true
         )
 
-        // 🎚️ Chips de orden
+        // Chips de orden + botón ⇅
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             listOf("Título", "Artista", "Álbum", "BPM", "Género").forEach { field ->
                 FilterChip(
                     selected = state.sortField == field,
                     onClick = { onSortChange(field) },
-                    label = { Text(field, fontSize = 11.sp) }
+                    label = { Text(field, fontSize = 10.sp) }
                 )
+            }
+            // Botón ⇅
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp).clickable { onToggleSortDirection() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (state.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                        contentDescription = if (state.sortAscending) "Ascendente" else "Descendente",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // 🎯 Filtros desplegables
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1223,14 +1389,13 @@ fun LibraryScreen(
         Spacer(Modifier.height(8.dp))
 
         Text(
-            "${filtered.size} canciones · orden: ${state.sortField}",
+            "${filtered.size} canciones · orden: ${state.sortField} ${if (state.sortAscending) "▲" else "▼"}",
             fontSize = 12.sp, color = Color.Gray,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         Spacer(Modifier.height(6.dp))
 
-        // 📜 Lista
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
@@ -1248,7 +1413,6 @@ fun LibraryScreen(
             }
         }
 
-        // ▶ Reproducir este orden
         Button(
             onClick = { onPlayThisOrder(filtered) },
             modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
@@ -1298,6 +1462,7 @@ fun FilterDropdown(
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -1345,7 +1510,7 @@ fun SettingsScreen(
                     Text(state.currentKey?.let { "Tonalidad: ${shortKey(it)}" } ?: "Detectar tonalidad")
                 }
                 Button(onClick = onLookupGenre, modifier = Modifier.fillMaxWidth()) {
-                    Text("Buscar género online")
+                    Text("Buscar género (Wikipedia / Deezer)")
                 }
                 state.genre?.let { Text(it, fontSize = 13.sp, color = Color.Gray) }
                 if (state.analysisText.isNotBlank()) {
