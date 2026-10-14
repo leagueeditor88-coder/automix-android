@@ -20,7 +20,6 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
-import androidx.media.app.NotificationCompat.MediaStyle
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -622,9 +621,6 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
             .addAction(android.R.drawable.ic_media_previous, "Anterior", prevPending)
             .addAction(playPauseIcon, playPauseText, pausePending)
             .addAction(android.R.drawable.ic_media_next, "Siguiente", nextPending)
-            .setStyle(
-                MediaStyle().setShowActionsInCompactView(0, 1, 2)
-            )
             .setOngoing(!paused)
             .build()
     }
