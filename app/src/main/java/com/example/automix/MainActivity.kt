@@ -354,15 +354,33 @@ class MainActivity : ComponentActivity() {
     // ---------------- Reproducción ----------------
 
     private fun playAt(index: Int) {
-        val display = buildDisplayList()
-        if (display.isEmpty()) { Toast.makeText(this, "No hay canciones cargadas", Toast.LENGTH_SHORT).show(); return }
-        startForegroundService(Intent(this, AutomixService::class.java))
-        svc?.let {
-            it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
-            it.transitionStyle = transitionStyle
-            it.startOrdered(display, index.coerceAtLeast(0))
-        }
+    val display = buildDisplayList()
+    if (display.isEmpty()) { 
+        Toast.makeText(this, "No hay canciones cargadas", Toast.LENGTH_SHORT).show()
+        return 
     }
+    startForegroundService(Intent(this, AutomixService::class.java))
+    svc?.let {
+        it.playPercent = percent; it.fadeSec = fade; it.skipIntroSec = skip
+        it.transitionStyle = transitionStyle
+        it.startOrdered(display, index.coerceAtLeast(0))
+    }
+}
+
+private fun reshuffleQueueHot() {
+    val s = svc
+    if (s?.current == null) {
+        Toast.makeText(this, "Reproduce algo primero", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val currentUri = s.current?.uri
+    val currentTrack = filteredTracks.firstOrNull { it.uri == currentUri }
+    val others = filteredTracks.filter { it.uri != currentUri }.shuffled()
+    val newQueue = if (currentTrack != null) listOf(currentTrack) + others else others
+    s.reorderQueue(newQueue)
+    Toast.makeText(this, "🔀 Cola re-barajada (${others.size} canciones)", Toast.LENGTH_SHORT).show()
+    refreshNow()
+}
 
     private fun togglePlayPause() {
         val s = svc ?: return
