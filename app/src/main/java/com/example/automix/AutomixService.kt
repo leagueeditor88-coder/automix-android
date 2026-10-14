@@ -264,7 +264,18 @@ class AutomixService : Service() {
         pos = max(0, pos - 1)
         transitionTo(order[pos], 2000)
     }
-
+/** Devuelve las próximas [limit] canciones en la cola (sin incluir la actual). */
+fun getUpcomingQueue(limit: Int = 2): List<Track> {
+    if (!running || order.isEmpty() || tracks.isEmpty()) return emptyList()
+    val result = mutableListOf<Track>()
+    var i = 1
+    while (result.size < limit && i <= order.size) {
+        val idx = (pos + i) % order.size
+        tracks.getOrNull(order[idx])?.let { result.add(it) }
+        i++
+    }
+    return result
+}
     fun togglePause() {
         if (cur == null) return
         if (paused) resume() else pause()
