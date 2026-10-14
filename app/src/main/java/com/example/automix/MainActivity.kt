@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
     private val collator: java.text.Collator = java.text.Collator.getInstance()
 
     data class UiSnapshot(
+     val upcomingQueue: List<Track> = emptyList()   
     val tracks: List<Track> = emptyList(),
     val current: Track? = null,
     val isPlaying: Boolean = false,
