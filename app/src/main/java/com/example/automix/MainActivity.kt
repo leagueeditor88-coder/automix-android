@@ -268,9 +268,15 @@ class MainActivity : ComponentActivity() {
         if (checkSelfPermission(audioPerm) != PackageManager.PERMISSION_GRANTED) return
         val found = mutableListOf<Track>()
         val proj = arrayOf(
-            Media._ID, Media.TITLE, Media.ARTIST, Media.DURATION, Media.DATA,
-            Media.ALBUM, Media.GENRE, Media.ALBUM_ID
-        )
+    Media._ID, Media.TITLE, Media.ARTIST, Media.DURATION, Media.DATA,
+    Media.ALBUM, Media.GENRE, Media.ALBUM_ID
+)
+// Forzar columna ALBUM_ID si existe
+val albumIdColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    Media.ALBUM_ID
+} else {
+    "album_id"
+}
         contentResolver.query(
             Media.EXTERNAL_CONTENT_URI, proj,
             "${Media.IS_MUSIC} != 0 AND ${Media.DURATION} >= 60000",
@@ -288,7 +294,7 @@ class MainActivity : ComponentActivity() {
                 val path = if (iData >= 0) c.getString(iData) else null
                 val album = if (iAlbum >= 0) c.getString(iAlbum) ?: "" else ""
                 val genre = if (iGenre >= 0) c.getString(iGenre)?.takeIf { it != "<unknown>" } ?: "" else ""
-                val albumId = if (iAlbumId >= 0) c.getLong(iAlbumId) else -1L
+                val albumId = if (iAlbumId >= 0) c.getLong(iAlbumId) else c.getLong(iId)
                 found += Track(
                     ContentUris.withAppendedId(Media.EXTERNAL_CONTENT_URI, c.getLong(iId)),
                     c.getString(iTitle) ?: "Sin título",
@@ -759,20 +765,70 @@ fun AlbumArt(albumId: Long, size: Dp) {
     var bitmap by remember(albumId) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     LaunchedEffect(albumId) {
-        if (albumId > 0) {
-            withContext(Dispatchers.IO) {
+        if (albumId <= 0) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            val resolver = context.contentResolver
+            var bmp: android.graphics.Bitmap? = null
+
+            // Intento 1: content://media/external/audio/albumart/{id}
+            try {
+                val uri1 = ContentUris.withAppendedId(
+                    Uri.parse("content://media/external/audio/albumart"),
+                    albumId
+                )
+                bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    resolver.loadThumbnail(uri1, android.util.Size(512, 512), null)
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.provider.MediaStore.Images.Media.getBitmap(resolver, uri1)
+                }
+            } catch (_: Exception) { bmp = null }
+
+            // Intento 2: content://media/external/audio/albums/{id} (API vieja)
+            if (bmp == null) {
                 try {
-                    val uri = ContentUris.withAppendedId(
-                        Uri.parse("content://media/external/audio/albumart"),
+                    @Suppress("DEPRECATION")
+                    val uri2 = ContentUris.withAppendedId(
+                        Uri.parse("content://media/external/audio/albums"),
                         albumId
                     )
-                    val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
+                    bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        resolver.loadThumbnail(uri2, android.util.Size(512, 512), null)
                     } else {
-                        android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                        @Suppress("DEPRECATION")
+                        android.provider.MediaStore.Images.Media.getBitmap(resolver, uri2)
                     }
-                    withContext(Dispatchers.Main) { bitmap = bmp }
-                } catch (_: Exception) { /* sin carátula */ }
+                } catch (_: Exception) { bmp = null }
+            }
+
+            // Intento 3: como último recurso, obtener el álbum por MediaStore.Audio.Albums
+            if (bmp == null) {
+                try {
+                    val albumUri = ContentUris.withAppendedId(
+                        android.provider.MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+                        albumId
+                    )
+                    val cursor = resolver.query(
+                        albumUri,
+                        arrayOf(android.provider.MediaStore.Audio.Albums.ALBUM_ART),
+                        null, null, null
+                    )
+                    cursor?.use { c ->
+                        if (c.moveToFirst()) {
+                            val artPath = c.getString(0)
+                            if (artPath != null) {
+                                val file = java.io.File(artPath)
+                                if (file.exists()) {
+                                    bmp = android.graphics.BitmapFactory.decodeFile(artPath)
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Exception) { bmp = null }
+            }
+
+            if (bmp != null) {
+                withContext(Dispatchers.Main) { bitmap = bmp }
             }
         }
     }
@@ -801,7 +857,6 @@ fun AlbumArt(albumId: Long, size: Dp) {
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AutomixApp(
@@ -1359,21 +1414,32 @@ fun LibraryScreen(
                 )
             }
             // Botón ⇅
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp).clickable { onToggleSortDirection() }
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (state.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                        contentDescription = if (state.sortAscending) "Ascendente" else "Descendente",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
+            // Botón ascendente/descendente
+Button(
+    onClick = onToggleSortDirection,
+    modifier = Modifier.height(36.dp),
+    shape = RoundedCornerShape(18.dp),
+    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+    colors = ButtonDefaults.buttonColors(
+        containerColor = if (state.sortAscending)
+            MaterialTheme.colorScheme.primary
+        else
+            MaterialTheme.colorScheme.tertiary,
+        contentColor = MaterialTheme.colorScheme.onPrimary
+    )
+) {
+    Icon(
+        imageVector = if (state.sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+        contentDescription = null,
+        modifier = Modifier.size(16.dp)
+    )
+    Spacer(Modifier.width(4.dp))
+    Text(
+        text = if (state.sortAscending) "A-Z" else "Z-A",
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold
+    )
+}
 
         Spacer(Modifier.height(8.dp))
 
