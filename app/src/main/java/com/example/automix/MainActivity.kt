@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,10 @@ class MainActivity : ComponentActivity() {
     private var currentGenre: String? = null
 
     private val uiState = mutableStateOf(UiSnapshot())
+    
+    private fun pushState(update: (UiSnapshot) -> UiSnapshot) {
+    uiState.value = update(uiState.value)
+    }
     private val collator: java.text.Collator = java.text.Collator.getInstance()
 
     data class UiSnapshot(
@@ -765,7 +770,7 @@ fun MashupScreen(state: MainActivity.UiSnapshot, onMashup: (Int) -> Unit) {
         }
     }
 }
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     state: MainActivity.UiSnapshot,
