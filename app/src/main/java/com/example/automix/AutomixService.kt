@@ -20,12 +20,17 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
+/**
+ * Modelo único de pista usado por toda la app.
+ * (Debe existir UNA sola definición en todo el proyecto.)
+ */
 data class Track(
     val uri: Uri,
     val title: String,
@@ -547,10 +552,7 @@ class AutomixService : Service() {
     }
 
     // ---------- Notificación / servicio en primer plano ----------
-    
-     -------- Notificación / servicio en primer plano ----------
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureForeground()
         when (intent?.action) {
             ACTION_PAUSE -> togglePause()
@@ -621,10 +623,10 @@ class AutomixService : Service() {
             .addAction(playPauseIcon, playPauseText, pausePending)
             .addAction(android.R.drawable.ic_media_next, "Siguiente", nextPending)
             .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
+                MediaStyle().setShowActionsInCompactView(0, 1, 2)
             )
             .setOngoing(!paused)
             .build()
     }
 }
+    
