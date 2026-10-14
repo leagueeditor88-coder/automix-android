@@ -230,13 +230,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             },
-            onReshuffleQueue = { reshuffleQueueHot() }
-        )
+              onReshuffleQueue = { reshuffleQueueHot() }
+            )
+        }
     }
+
+    bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
+    ensurePermissions()
 }
 
-bindService(Intent(this, AutomixService::class.java), conn, BIND_AUTO_CREATE)
-
+// ---------------- Permisos y biblioteca ----------------
     // ---------------- Permisos y biblioteca ----------------
 
     private fun ensurePermissions() {
