@@ -582,47 +582,48 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     }
 
     private fun createNotification(): Notification {
-        val title = current?.title ?: "Automix"
-        val artist = current?.artist ?: "Reproduciendo música"
+    val title = current?.title ?: "Automix"
+    val artist = current?.artist ?: "Reproduciendo música"
 
-        val mainIntent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, mainIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    val mainIntent = Intent(this, MainActivity::class.java)
+    val pendingIntent = PendingIntent.getActivity(
+        this, 0, mainIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-        val pauseIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PAUSE }
-        val pausePending = PendingIntent.getService(
-            this, 1, pauseIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    val pauseIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PAUSE }
+    val pausePending = PendingIntent.getService(
+        this, 1, pauseIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-        val nextIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_NEXT }
-        val nextPending = PendingIntent.getService(
-            this, 2, nextIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    val nextIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_NEXT }
+    val nextPending = PendingIntent.getService(
+        this, 2, nextIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-        val prevIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PREV }
-        val prevPending = PendingIntent.getService(
-            this, 3, prevIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    val prevIntent = Intent(this, AutomixService::class.java).apply { action = ACTION_PREV }
+    val prevPending = PendingIntent.getService(
+        this, 3, prevIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-        val playPauseIcon = if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause
-        val playPauseText = if (paused) "Reproducir" else "Pausar"
+    val playPauseIcon = if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause
+    val playPauseText = if (paused) "Reproducir" else "Pausar"
 
-        return NotificationCompat.Builder(this, CHANNEL)
-            .setContentTitle(title)
-            .setContentText(artist)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentIntent(pendingIntent)
-            .setSilent(true)
-            .addAction(android.R.drawable.ic_media_previous, "Anterior", prevPending)
-            .addAction(playPauseIcon, playPauseText, pausePending)
-            .addAction(android.R.drawable.ic_media_next, "Siguiente", nextPending)
-            .setOngoing(!paused)
-            .build()
+    return NotificationCompat.Builder(this, CHANNEL)
+        .setContentTitle(title)
+        .setContentText(artist)
+        .setSmallIcon(android.R.drawable.ic_media_play)
+        .setContentIntent(pendingIntent)
+        .setSilent(true)
+        .addAction(android.R.drawable.ic_media_previous, "Anterior", prevPending)
+        .addAction(playPauseIcon, playPauseText, pausePending)
+        .addAction(android.R.drawable.ic_media_next, "Siguiente", nextPending)
+        .setOngoing(!paused)
+        .build()
     }
+    
 }
     
