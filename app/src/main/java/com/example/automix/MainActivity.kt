@@ -220,40 +220,50 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadLibrary() {
-        if (checkSelfPermission(audioPerm) != PackageManager.PERMISSION_GRANTED) return
-        val found = mutableListOf<Track>()
-        val proj = arrayOf(Media._ID, Media.TITLE, Media.ARTIST, Media.DURATION, Media.DATA)
-        contentResolver.query(
-            Media.EXTERNAL_CONTENT_URI, proj,
-            "${Media.IS_MUSIC} != 0 AND ${Media.DURATION} >= 60000",
-            null, "${Media.TITLE} COLLATE NOCASE ASC"
-        )?.use { c ->
-            val iId = c.getColumnIndex(Media._ID)
-            val iTitle = c.getColumnIndex(Media.TITLE)
-            val iArtist = c.getColumnIndex(Media.ARTIST)
-            val iDur = c.getColumnIndex(Media.DURATION)
-            val iData = c.getColumnIndex(Media.DATA)
-            while (c.moveToNext()) {
-                val path = if (iData >= 0) c.getString(iData) else null
-                found += Track(
-                    ContentUris.withAppendedId(Media.EXTERNAL_CONTENT_URI, c.getLong(iId)),
-                    c.getString(iTitle) ?: "Sin título",
-                    if (iArtist >= 0) c.getString(iArtist)?.takeIf { it != "<unknown>" } ?: "Artista desconocido"
-                    else "Artista desconocido",
-                    c.getLong(iDur),
-                    path?.let { File(it).parent } ?: "Música"
-                )
-            }
+    private fun loadLibrary() {
+    if (checkSelfPermission(audioPerm) != PackageManager.PERMISSION_GRANTED) return
+    val found = mutableListOf<Track>()
+    val proj = arrayOf(
+        Media._ID, Media.TITLE, Media.ARTIST, Media.DURATION, Media.DATA,
+        Media.ALBUM, Media.GENRE
+    )
+    contentResolver.query(
+        Media.EXTERNAL_CONTENT_URI, proj,
+        "${Media.IS_MUSIC} != 0 AND ${Media.DURATION} >= 60000",
+        null, "${Media.TITLE} COLLATE NOCASE ASC"
+    )?.use { c ->
+        val iId = c.getColumnIndex(Media._ID)
+        val iTitle = c.getColumnIndex(Media.TITLE)
+        val iArtist = c.getColumnIndex(Media.ARTIST)
+        val iDur = c.getColumnIndex(Media.DURATION)
+        val iData = c.getColumnIndex(Media.DATA)
+        val iAlbum = c.getColumnIndex(Media.ALBUM)
+        val iGenre = c.getColumnIndex(Media.GENRE)
+        while (c.moveToNext()) {
+            val path = if (iData >= 0) c.getString(iData) else null
+            val album = if (iAlbum >= 0) c.getString(iAlbum) ?: "" else ""
+            val genre = if (iGenre >= 0) c.getString(iGenre)?.takeIf { it != "<unknown>" } ?: "" else ""
+            found += Track(
+                ContentUris.withAppendedId(Media.EXTERNAL_CONTENT_URI, c.getLong(iId)),
+                c.getString(iTitle) ?: "Sin título",
+                if (iArtist >= 0) c.getString(iArtist)?.takeIf { it != "<unknown>" } ?: "Artista desconocido"
+                else "Artista desconocido",
+                c.getLong(iDur),
+                path?.let { File(it).parent } ?: "Música",
+                album,
+                genre
+            )
         }
-        allTracks = found
-        randomRank = allTracks.shuffled().mapIndexed { i, t -> t.uri.toString() to i }.toMap()
-        applyFolderFilter()
-        if (found.isEmpty()) {
-            pushState { it.copy(statusText = "No encontré canciones en el dispositivo", permissionGranted = true) }
-        } else {
-            pushState { it.copy(permissionGranted = true) }
-            analyzeLibraryInBackground()
-        }
+    }
+    allTracks = found
+    randomRank = allTracks.shuffled().mapIndexed { i, t -> t.uri.toString() to i }.toMap()
+    applyFolderFilter()
+    if (found.isEmpty()) {
+        pushState { it.copy(statusText = "No encontré canciones en el dispositivo", permissionGranted = true) }
+    } else {
+        pushState { it.copy(permissionGranted = true) }
+        analyzeLibraryInBackground()
+    }
     }
 
     private fun applyFolderFilter() {
