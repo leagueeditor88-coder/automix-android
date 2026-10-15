@@ -148,7 +148,17 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    super.onCreate(savedInstanceState)
+
+    if (intent?.action == Intent.ACTION_VIEW) {
+        val audioUri = intent.data
+
+        if (audioUri != null) {
+            // Pendiente: conectar el archivo seleccionado con el reproductor.
+        }
+    }
+
+    prefs = getSharedPreferences("automix", MODE_PRIVATE)
         prefs = getSharedPreferences("automix", MODE_PRIVATE)
         percent = prefs.getInt("percent", 70)
         fade = prefs.getInt("fade", 8)
